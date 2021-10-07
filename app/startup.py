@@ -1,4 +1,5 @@
 # TODO: find metaclass that support struct-like classes in python
+# https://www.youtube.com/watch?v=vBH6GRJ1REM
 # TODO: matplotlib to visualize
 
 # TODO: introduce NodeList?
