@@ -7,7 +7,7 @@ import numpy as np
 
 
 class Node:
-    _counter: int = 0
+    _counter: int = 1
     
     def __init__(self, arg_x: float, arg_y: float) -> None:
         self.x: float = arg_x
@@ -19,19 +19,31 @@ class Node:
     def get_position(self):
         return (self.x, self.y)
     
+    def get_id(self):
+        return self._id
+    
 
 class NodesContainer:
-    def __init__(self, size: tuple, nodes: tuple) -> None:
-        self._array = np.empty(nodes, dtype=Node)
-        for col in reversed(range(nodes[1])):
-            for row in range(nodes[0]):
-                self._array[row, col] = Node(size[0], size[1])
+    def __init__(self, size: tuple, n_nodes: tuple) -> None:
+        # n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
+        self._array = np.empty(n_nodes, dtype=Node)
+        dh: float = size[0]/n_nodes[0]
+        dw: float = size[1]/n_nodes[1]
+        
+        for col in range(n_nodes[1]):
+            for row in reversed(range(n_nodes[0])):
+                pos_x: float = dw * col
+                pos_y: float = dh * (n_nodes[0] - 1 - row)
+
+                self._array[row, col] = Node(pos_x, pos_y)
     
         self.print_array()
         
-    def get_surrounding_nodes(self) -> np.array:
-        _from, _to = Element._counter, Element._counter + 1
-        return self._array[_from:_to, _from:_to]
+    def get_surrounding_nodes(self, arg_id: int) -> np.array:
+        _from, _to = arg_id - 1, arg_id + 1
+        N: int = len(self._array)
+
+        return self._array[N - _to:N - _from, _from:_to]
     
     def print_array(self):
         for i in self._array:
@@ -42,21 +54,31 @@ class NodesContainer:
 
 # TODO: introduce ElementList?
 class Element:
-    _counter: int = 0
+    _counter: int = 1
     
     def __init__(self, arg_nodes: NodesContainer) -> None:
-        self.surr_nodes: NodesContainer = arg_nodes.get_surrounding_nodes()
+        # shape = arg_nodes._array.shape
         self._id: int = Element._counter
+        self.surr_nodes: NodesContainer = arg_nodes.get_surrounding_nodes(self._id)
+
         Element._counter += 1
 
 
 class ElementsContainer:
     def __init__(self, size: tuple, nodes: NodesContainer) -> None:
         self._array = np.empty(size, dtype=Element)
-        for row in range(size[1]):
-            for col in range(size[0]):
+        for col in range(size[1]):
+            for row in reversed(range(size[0])):
                 self._array[row, col] = Element(nodes)
     
+        self.print_elements()
+
+    def print_elements(self):
+        for i in self._array:
+            for j in i:
+                print(j._id, end=' ')
+            
+            print()
 
 class Grid:
     def __init__(self,
