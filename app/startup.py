@@ -29,8 +29,8 @@ class NodesContainer:
     def __init__(self, size: tuple, n_nodes: tuple) -> None:
         # n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
         self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
-        dh: float = size[0]/n_nodes[0]
-        dw: float = size[1]/n_nodes[1]
+        dh: float = size[0]/(n_nodes[0] - 1)
+        dw: float = size[1]/(n_nodes[1] - 1)
         
         for col in range(n_nodes[1]):
             for row in reversed(range(n_nodes[0])):
@@ -61,6 +61,16 @@ class NodesContainer:
         for i in self._array:
             for j in i:
                 print(j._id, end=' ')
+            print()
+    
+    def print_all_data(self):
+        for i in self._array:
+            for j in i:
+                print(f"id:{j._id:0>2d}", end='')
+                print(f"x:{j.x:0=2.2f}", end='')
+                print(f"y:{j.y:0=2.2f} | ", end='')
+                
+            print()
             print()
     
     def __getitem__(self, pos: tuple):
@@ -164,31 +174,32 @@ class Grid:
 
 if __name__ == "__main__":
     g = Grid(height=3.3, width=4.2, nodes_vertiacl=3, nodes_horizontal=4)
-    print(g.ELEMENTS.get_by_id(2))
+    g.NODES.print_all_data()
+    # print(g.ELEMENTS.get_by_id(2))
 
     # Testing
-    for i in g.NODES._array:
-        for j in i:
-            print(j._id, end=' ')
-        print()
+    # for i in g.NODES._array:
+    #     for j in i:
+    #         print(j._id, end=' ')
+    #     print()
 
-    for i in g.ELEMENTS._array[0, 0].surr_nodes:
-        for j in i:
-            print(j._id, end=' ')
-        print()
+    # for i in g.ELEMENTS._array[0, 0].surr_nodes:
+    #     for j in i:
+    #         print(j._id, end=' ')
+    #     print()
 
-    print()
+    # print()
 
-    g.ELEMENTS._array[0, 0].surr_nodes[0, 0].x = 100
-    g.ELEMENTS._array[0, 0].surr_nodes[0, 0].y = 101
-    for i in g.NODES._array:
-        for j in i:
-            print(j._id, end=' ')
-        print()
+    # g.ELEMENTS._array[0, 0].surr_nodes[0, 0].x = 100
+    # g.ELEMENTS._array[0, 0].surr_nodes[0, 0].y = 101
+    # for i in g.NODES._array:
+    #     for j in i:
+    #         print(j._id, end=' ')
+    #     print()
 
-    for i in g.ELEMENTS._array[0, 0].surr_nodes:
-        for j in i:
-            print(j._id, end=' ')
-        print()
+    # for i in g.ELEMENTS._array[0, 0].surr_nodes:
+    #     for j in i:
+    #         print(j._id, end=' ')
+    #     print()
 
-    print()
+    # print()
