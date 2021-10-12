@@ -90,7 +90,7 @@ class NodesContainer:
 
         return self[y, x]
     
-    def print_array(self):
+    def print_nodes(self):
         '''This method prints out id for each node in proper format.'''
 
         for i in self._array:
@@ -221,14 +221,21 @@ class Grid:
 
         return x, y
 
-    
 
 if __name__ == "__main__":
-    g = Grid(height=3.3, width=4.2, nodes_vertiacl=3, nodes_horizontal=4)
+    # g = Grid(height=3.3, width=4.2, nodes_vertiacl=3, nodes_horizontal=4)
+    g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
+
+    print("Printing all nodes ids:")
+    g.NODES.print_nodes()
+    print("\nPrinting all elements ids:")
+    g.ELEMENTS.print_elements()
+
+    print("\nPrinting all nodes with coordinates:")
     g.NODES.print_all_data()
-    # g.ELEMENTS.print_elements()
-    g.ELEMENTS.get_by_id(6).surr_nodes.print_all_data()
-    # print(g.ELEMENTS.get_by_id(2))
+
+    print(f"Printing neighbour nodes for element no.: {(e := 22)}:")
+    g.ELEMENTS.get_by_id(e).surr_nodes.print_all_data()
 
     # Testing
     # for i in g.NODES._array:
