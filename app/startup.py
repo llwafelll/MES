@@ -26,36 +26,72 @@ class Node:
     
 
 class NodesContainer:
-    def __init__(self, size: tuple, n_nodes: tuple) -> None:
-        # n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
-        self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
-        dh: float = size[0]/(n_nodes[0] - 1)
-        dw: float = size[1]/(n_nodes[1] - 1)
-        
-        for col in range(n_nodes[1]):
-            for row in reversed(range(n_nodes[0])):
-                pos_x: float = dw * col
-                pos_y: float = dh * (n_nodes[0] - 1 - row)
+    def __init__(self, n_nodes: tuple, size: tuple = None,
+                 arg_nodes: np.ndarray = np.array([])) -> None:
+                
+        # Creates NodesContainer whose _array keep references certain nodes
+        if arg_nodes.size:
+            self._array: np.array = np.empty(n_nodes, dtype=Node)
 
-                self._array[row, col] = Node(pos_x, pos_y)
+            for col in range(n_nodes[1]):
+                for row in reversed(range(n_nodes[0])):
+                    self._array[row, col] = arg_nodes[row, col]
         
-        self.shape = self._array.shape
-    
-        self.print_array()
+        # Creates entirely new nodes (usend in initialization)
+        elif size:
+            # n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
+            self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
+            dh: float = size[0]/(n_nodes[0] - 1)
+            dw: float = size[1]/(n_nodes[1] - 1)
+            
+            for col in range(n_nodes[1]):
+                for row in reversed(range(n_nodes[0])):
+                    pos_x: float = dw * col
+                    pos_y: float = dh * (n_nodes[0] - 1 - row)
+
+                    self._array[row, col] = Node(pos_x, pos_y)
+            
+            self.shape = self._array.shape
+        
+            self.print_array()
         
     def get_nodes_surrouding_element(self, arg_id: int) -> np.ndarray:
-        _from, _to = arg_id - 1, arg_id + 1
-        N: int = len(self._array)
+        # arg_id is element id
+        # self.shape returns nodesContainer shape
 
-        return self._array[_from:_to, N - _to:N - _from]
-        # return self._array[N - _to:N - _from, _from:_to]
+        # el_x, el_y = Grid.convert_id_to_coord(arg_id, self.shape[0])
+        # node_x, node_y = Grid.convert_id_to_coord(arg_id, self.shape[0] + 1)
+        x, y = Grid.convert_id_to_coord(arg_id, self.shape[0] - 1)
+
+        # node left down corner id:
+        node_id = arg_id + x
+        node_x, node_y = Grid.convert_id_to_coord(node_id, self.shape[0])
+        v_from, v_to = node_y - 1, node_y + 1
+        h_from, h_to = node_x, node_x + 2
+
+        # v_from, v_to = self.shape[0] - y, self.shape[0] - node_id + 1
+        # h_from, h_to = x, node_id + 1
+
+        # return self._array[_from:_to, N - _to:N - _from]
+        # return self._array[N - _to:N - _from, _from:_to] # <- right
+        return self._array[v_from:v_to, h_from:h_to]
 
     def get_by_id(self, id: int) -> np.ndarray:
-        x = (id - 1) // (self.shape[0])
-        y = (id - 1) % self.shape[0]
-        y = ((self.shape[0] - 1) - y)
+        x, y = Grid.convert_id_to_coord(id, self.shape[0])
+        # x = (id - 1) // (self.shape[0])
+        # y = (id - 1) % self.shape[0]
+        # y = ((self.shape[0] - 1) - y)
+        # x = self._calc_x()
+        # y = self._calc_y()
 
         return self[y, x]
+    
+    def _calc_x(self, id: int) -> int:
+        return (id - 1) // (self.shape[0])
+    
+    def _calc_y(self, id: int) -> int:
+        y = (id - 1) % self.shape[0]
+        return ((self.shape[0] - 1) - y)
     
     def print_array(self):
         for i in self._array:
@@ -86,7 +122,12 @@ class Element:
     def __init__(self, arg_nodes: NodesContainer) -> None:
         # shape = arg_nodes._array.shape
         self._id: int = Element._counter
-        self.surr_nodes: np.ndarray = arg_nodes.get_nodes_surrouding_element(self._id)
+        # self.surr_nodes: np.ndarray = arg_nodes.get_nodes_surrouding_element(self._id)
+        self.surr_nodes: NodesContainer = \
+            NodesContainer(
+                n_nodes=(2, 2),
+                arg_nodes=arg_nodes.get_nodes_surrouding_element(self._id)
+                )
 
         Element._counter += 1
 
@@ -104,9 +145,10 @@ class ElementsContainer:
         self.print_elements()
     
     def get_by_id(self, id: int) -> np.ndarray:
-        x = (id - 1) // (self.shape[0])
-        y = (id - 1) % self.shape[0]
-        y = ((self.shape[0] - 1) - y)
+        x, y = Grid.convert_id_to_coord(id, self.shape[0])
+        # x = (id - 1) // (self.shape[0])
+        # y = (id - 1) % self.shape[0]
+        # y = ((self.shape[0] - 1) - y)
 
         return self[y, x]
 
@@ -142,7 +184,7 @@ class Grid:
 
         # TODO: initialize following attributes
         # references to the objects?
-        self.NODES: NodesContainer = NodesContainer(self.get_size(), self.get_n_nodes())
+        self.NODES: NodesContainer = NodesContainer(self.get_n_nodes(), size=self.get_size())
         self.ELEMENTS: ElementsContainer = \
             ElementsContainer(self.get_n_elements(), self.NODES)
 
@@ -171,10 +213,21 @@ class Grid:
     def get_nodes_surrouding_element(self, element_id: int) -> np.ndarray:
         return self.NODES.get_nodes_surrouding_element(element_id)
     
+    @staticmethod
+    def convert_id_to_coord(arg_id: int, height: int):
+        x = (arg_id - 1) // height
+        y = (arg_id - 1) % height
+        y = ((height - 1) - y)
+
+        return x, y
+
+    
 
 if __name__ == "__main__":
     g = Grid(height=3.3, width=4.2, nodes_vertiacl=3, nodes_horizontal=4)
     g.NODES.print_all_data()
+    # g.ELEMENTS.print_elements()
+    g.ELEMENTS.get_by_id(6).surr_nodes.print_all_data()
     # print(g.ELEMENTS.get_by_id(2))
 
     # Testing
