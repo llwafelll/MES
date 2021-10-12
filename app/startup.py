@@ -56,11 +56,6 @@ class NodesContainer:
             self.print_array()
         
     def get_nodes_surrouding_element(self, arg_id: int) -> np.ndarray:
-        # arg_id is element id
-        # self.shape returns nodesContainer shape
-
-        # el_x, el_y = Grid.convert_id_to_coord(arg_id, self.shape[0])
-        # node_x, node_y = Grid.convert_id_to_coord(arg_id, self.shape[0] + 1)
         x, y = Grid.convert_id_to_coord(arg_id, self.shape[0] - 1)
 
         # node left down corner id:
@@ -69,20 +64,10 @@ class NodesContainer:
         v_from, v_to = node_y - 1, node_y + 1
         h_from, h_to = node_x, node_x + 2
 
-        # v_from, v_to = self.shape[0] - y, self.shape[0] - node_id + 1
-        # h_from, h_to = x, node_id + 1
-
-        # return self._array[_from:_to, N - _to:N - _from]
-        # return self._array[N - _to:N - _from, _from:_to] # <- right
         return self._array[v_from:v_to, h_from:h_to]
 
     def get_by_id(self, id: int) -> np.ndarray:
         x, y = Grid.convert_id_to_coord(id, self.shape[0])
-        # x = (id - 1) // (self.shape[0])
-        # y = (id - 1) % self.shape[0]
-        # y = ((self.shape[0] - 1) - y)
-        # x = self._calc_x()
-        # y = self._calc_y()
 
         return self[y, x]
     
@@ -146,9 +131,6 @@ class ElementsContainer:
     
     def get_by_id(self, id: int) -> np.ndarray:
         x, y = Grid.convert_id_to_coord(id, self.shape[0])
-        # x = (id - 1) // (self.shape[0])
-        # y = (id - 1) % self.shape[0]
-        # y = ((self.shape[0] - 1) - y)
 
         return self[y, x]
 
