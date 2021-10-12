@@ -28,22 +28,33 @@ class Node:
 class NodesContainer:
     def __init__(self, n_nodes: tuple, size: tuple = None,
                  arg_nodes: np.ndarray = np.array([])) -> None:
+        '''The constructor for NodesContainer works in two modes.
+        MODE_1: privide arg_nodes numpy array and n_nodes to create 
+                new NodeContaier which holds references to the arg_nodes objects. 
+        MDOE_2: provide size and n_nodes to create new array of the nodes
+                from scratch.
+        '''
                 
         # Creates NodesContainer whose _array keep references certain nodes
         if arg_nodes.size:
             self._array: np.array = np.empty(n_nodes, dtype=Node)
 
+            # Loop that rewrites adresses of the objects from passed array
             for col in range(n_nodes[1]):
                 for row in reversed(range(n_nodes[0])):
                     self._array[row, col] = arg_nodes[row, col]
         
-        # Creates entirely new nodes (usend in initialization)
+        # Creates entirely new nodes (from scratch)
         elif size:
             # n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
             self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
+
+            # dh - delta height, dw - delta width
             dh: float = size[0]/(n_nodes[0] - 1)
             dw: float = size[1]/(n_nodes[1] - 1)
             
+            # Loop that calculates coordinates and uses them to construct
+            # new Node objects
             for col in range(n_nodes[1]):
                 for row in reversed(range(n_nodes[0])):
                     pos_x: float = dw * col
@@ -53,14 +64,22 @@ class NodesContainer:
             
             self.shape = self._array.shape
         
-            self.print_array()
-        
-    def get_nodes_surrouding_element(self, arg_id: int) -> np.ndarray:
-        x, y = Grid.convert_id_to_coord(arg_id, self.shape[0] - 1)
+    def get_nodes_surrounding_element(self, element_id: int) -> np.ndarray:
+        '''This method returns elements that are neighbours of the
+        element which id is passed as argument.'''
 
-        # node left down corner id:
-        node_id = arg_id + x
+        # Get coordinates for elementContainer array based on element id
+        # note: self.shape is shape for nodeContainer
+        el_x, el_y = Grid.convert_id_to_coord(element_id, self.shape[0] - 1)
+
+        # Calculate node left down corner id:
+        node_id = element_id + el_x
+
+        # Get coordinated for nodeContainer array based on node id
         node_x, node_y = Grid.convert_id_to_coord(node_id, self.shape[0])
+
+        # Create helper variables that indicated the interval to slice
+        # from nodeContainer
         v_from, v_to = node_y - 1, node_y + 1
         h_from, h_to = node_x, node_x + 2
 
@@ -71,20 +90,17 @@ class NodesContainer:
 
         return self[y, x]
     
-    def _calc_x(self, id: int) -> int:
-        return (id - 1) // (self.shape[0])
-    
-    def _calc_y(self, id: int) -> int:
-        y = (id - 1) % self.shape[0]
-        return ((self.shape[0] - 1) - y)
-    
     def print_array(self):
+        '''This method prints out id for each node in proper format.'''
+
         for i in self._array:
             for j in i:
                 print(j._id, end=' ')
             print()
     
     def print_all_data(self):
+        '''Prints out id, x and y coordinates in proper format.'''
+
         for i in self._array:
             for j in i:
                 print(f"id:{j._id:0>2d}", end='')
@@ -99,8 +115,6 @@ class NodesContainer:
         return self._array[i, j]
         
 
-
-# TODO: introduce ElementList?
 class Element:
     _counter: int = 1
     
@@ -111,7 +125,7 @@ class Element:
         self.surr_nodes: NodesContainer = \
             NodesContainer(
                 n_nodes=(2, 2),
-                arg_nodes=arg_nodes.get_nodes_surrouding_element(self._id)
+                arg_nodes=arg_nodes.get_nodes_surrounding_element(self._id)
                 )
 
         Element._counter += 1
@@ -127,8 +141,6 @@ class ElementsContainer:
         
         self.shape = self._array.shape
     
-        self.print_elements()
-    
     def get_by_id(self, id: int) -> np.ndarray:
         x, y = Grid.convert_id_to_coord(id, self.shape[0])
 
@@ -136,6 +148,8 @@ class ElementsContainer:
 
 
     def print_elements(self):
+        '''This method prints out id for each node in proper format.'''
+
         for i in self._array:
             for j in i:
                 print(j._id, end=' ')
@@ -164,9 +178,13 @@ class Grid:
         self.N_ELEMENTS_TOTAL: int = \
             (self.N_NODES_HORIZONTAL - 1) * (self.N_NODES_VERTICAL - 1)
 
-        # TODO: initialize following attributes
-        # references to the objects?
-        self.NODES: NodesContainer = NodesContainer(self.get_n_nodes(), size=self.get_size())
+
+        # Initialization of the nodes
+        self.NODES: NodesContainer = NodesContainer(self.get_n_nodes(),
+                                                    size=self.get_size())
+
+        # Initialization of the elements. NodesContainer has to be initialized
+        # firstly
         self.ELEMENTS: ElementsContainer = \
             ElementsContainer(self.get_n_elements(), self.NODES)
 
@@ -186,14 +204,14 @@ class Grid:
 
         return (self.N_NODES_VERTICAL - 1, self.N_NODES_HORIZONTAL - 1)
     
-    def get_element_by_id(self, arg_id: int) -> np.ndarray:
-        return self.ELEMENTS.get_by_id(arg_id)
+    def get_element_by_id(self, element_id: int) -> np.ndarray:
+        return self.ELEMENTS.get_by_id(element_id)
     
-    def get_node_by_id(self, arg_id: int) -> np.ndarray:
-        return self.NODES.get_by_id(arg_id)
+    def get_node_by_id(self, node_id: int) -> np.ndarray:
+        return self.NODES.get_by_id(node_id)
     
     def get_nodes_surrouding_element(self, element_id: int) -> np.ndarray:
-        return self.NODES.get_nodes_surrouding_element(element_id)
+        return self.NODES.get_nodes_surrounding_element(element_id)
     
     @staticmethod
     def convert_id_to_coord(arg_id: int, height: int):
