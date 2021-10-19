@@ -26,44 +26,81 @@ class Node:
     
 
 class NodesContainer:
-    def __init__(self, size: tuple, n_nodes: tuple) -> None:
-        # n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
-        self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
-        dh: float = size[0]/(n_nodes[0] - 1)
-        dw: float = size[1]/(n_nodes[1] - 1)
-        
-        for col in range(n_nodes[1]):
-            for row in reversed(range(n_nodes[0])):
-                pos_x: float = dw * col
-                pos_y: float = dh * (n_nodes[0] - 1 - row)
+    def __init__(self, n_nodes: tuple, size: tuple = None,
+                 arg_nodes: np.ndarray = np.array([])) -> None:
+        '''The constructor for NodesContainer works in two modes.
+        MODE_1: privide arg_nodes numpy array and n_nodes to create 
+                new NodeContaier which holds references to the arg_nodes objects. 
+        MDOE_2: provide size and n_nodes to create new array of the nodes
+                from scratch.
+        '''
+                
+        # Creates NodesContainer whose _array keep references certain nodes
+        if arg_nodes.size:
+            self._array: np.array = np.empty(n_nodes, dtype=Node)
 
-                self._array[row, col] = Node(pos_x, pos_y)
+            # Loop that rewrites adresses of the objects from passed array
+            for col in range(n_nodes[1]):
+                for row in reversed(range(n_nodes[0])):
+                    self._array[row, col] = arg_nodes[row, col]
         
-        self.shape = self._array.shape
-    
-        self.print_array()
-        
-    def get_nodes_surrouding_element(self, arg_id: int) -> np.ndarray:
-        _from, _to = arg_id - 1, arg_id + 1
-        N: int = len(self._array)
+        # Creates entirely new nodes (from scratch)
+        elif size:
+            # n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
+            self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
 
-        return self._array[_from:_to, N - _to:N - _from]
-        # return self._array[N - _to:N - _from, _from:_to]
+            # dh - delta height, dw - delta width
+            dh: float = size[0]/(n_nodes[0] - 1)
+            dw: float = size[1]/(n_nodes[1] - 1)
+            
+            # Loop that calculates coordinates and uses them to construct
+            # new Node objects
+            for col in range(n_nodes[1]):
+                for row in reversed(range(n_nodes[0])):
+                    pos_x: float = dw * col
+                    pos_y: float = dh * (n_nodes[0] - 1 - row)
+
+                    self._array[row, col] = Node(pos_x, pos_y)
+            
+            self.shape = self._array.shape
+        
+    def get_nodes_surrounding_element(self, element_id: int) -> np.ndarray:
+        '''This method returns elements that are neighbours of the
+        element which id is passed as argument.'''
+
+        # Get coordinates for elementContainer array based on element id
+        # note: self.shape is shape for nodeContainer
+        el_x, el_y = Grid.convert_id_to_coord(element_id, self.shape[0] - 1)
+
+        # Calculate node left down corner id:
+        node_id = element_id + el_x
+
+        # Get coordinated for nodeContainer array based on node id
+        node_x, node_y = Grid.convert_id_to_coord(node_id, self.shape[0])
+
+        # Create helper variables that indicated the interval to slice
+        # from nodeContainer
+        v_from, v_to = node_y - 1, node_y + 1
+        h_from, h_to = node_x, node_x + 2
+
+        return self._array[v_from:v_to, h_from:h_to]
 
     def get_by_id(self, id: int) -> np.ndarray:
-        x = (id - 1) // (self.shape[0])
-        y = (id - 1) % self.shape[0]
-        y = ((self.shape[0] - 1) - y)
+        x, y = Grid.convert_id_to_coord(id, self.shape[0])
 
         return self[y, x]
     
-    def print_array(self):
+    def print_nodes(self):
+        '''This method prints out id for each node in proper format.'''
+
         for i in self._array:
             for j in i:
                 print(j._id, end=' ')
             print()
     
     def print_all_data(self):
+        '''Prints out id, x and y coordinates in proper format.'''
+
         for i in self._array:
             for j in i:
                 print(f"id:{j._id:0>2d}", end='')
@@ -78,15 +115,18 @@ class NodesContainer:
         return self._array[i, j]
         
 
-
-# TODO: introduce ElementList?
 class Element:
     _counter: int = 1
     
     def __init__(self, arg_nodes: NodesContainer) -> None:
         # shape = arg_nodes._array.shape
         self._id: int = Element._counter
-        self.surr_nodes: np.ndarray = arg_nodes.get_nodes_surrouding_element(self._id)
+        # self.surr_nodes: np.ndarray = arg_nodes.get_nodes_surrouding_element(self._id)
+        self.surr_nodes: NodesContainer = \
+            NodesContainer(
+                n_nodes=(2, 2),
+                arg_nodes=arg_nodes.get_nodes_surrounding_element(self._id)
+                )
 
         Element._counter += 1
 
@@ -101,17 +141,15 @@ class ElementsContainer:
         
         self.shape = self._array.shape
     
-        self.print_elements()
-    
     def get_by_id(self, id: int) -> np.ndarray:
-        x = (id - 1) // (self.shape[0])
-        y = (id - 1) % self.shape[0]
-        y = ((self.shape[0] - 1) - y)
+        x, y = Grid.convert_id_to_coord(id, self.shape[0])
 
         return self[y, x]
 
 
     def print_elements(self):
+        '''This method prints out id for each node in proper format.'''
+
         for i in self._array:
             for j in i:
                 print(j._id, end=' ')
@@ -140,9 +178,13 @@ class Grid:
         self.N_ELEMENTS_TOTAL: int = \
             (self.N_NODES_HORIZONTAL - 1) * (self.N_NODES_VERTICAL - 1)
 
-        # TODO: initialize following attributes
-        # references to the objects?
-        self.NODES: NodesContainer = NodesContainer(self.get_size(), self.get_n_nodes())
+
+        # Initialization of the nodes
+        self.NODES: NodesContainer = NodesContainer(self.get_n_nodes(),
+                                                    size=self.get_size())
+
+        # Initialization of the elements. NodesContainer has to be initialized
+        # firstly
         self.ELEMENTS: ElementsContainer = \
             ElementsContainer(self.get_n_elements(), self.NODES)
 
@@ -162,20 +204,38 @@ class Grid:
 
         return (self.N_NODES_VERTICAL - 1, self.N_NODES_HORIZONTAL - 1)
     
-    def get_element_by_id(self, arg_id: int) -> np.ndarray:
-        return self.ELEMENTS.get_by_id(arg_id)
+    def get_element_by_id(self, element_id: int) -> np.ndarray:
+        return self.ELEMENTS.get_by_id(element_id)
     
-    def get_node_by_id(self, arg_id: int) -> np.ndarray:
-        return self.NODES.get_by_id(arg_id)
+    def get_node_by_id(self, node_id: int) -> np.ndarray:
+        return self.NODES.get_by_id(node_id)
     
     def get_nodes_surrouding_element(self, element_id: int) -> np.ndarray:
-        return self.NODES.get_nodes_surrouding_element(element_id)
+        return self.NODES.get_nodes_surrounding_element(element_id)
     
+    @staticmethod
+    def convert_id_to_coord(arg_id: int, height: int):
+        x = (arg_id - 1) // height
+        y = (arg_id - 1) % height
+        y = ((height - 1) - y)
+
+        return x, y
+
 
 if __name__ == "__main__":
-    g = Grid(height=3.3, width=4.2, nodes_vertiacl=3, nodes_horizontal=4)
+    # g = Grid(height=3.3, width=4.2, nodes_vertiacl=3, nodes_horizontal=4)
+    g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
+
+    print("Printing all nodes ids:")
+    g.NODES.print_nodes()
+    print("\nPrinting all elements ids:")
+    g.ELEMENTS.print_elements()
+
+    print("\nPrinting all nodes with coordinates:")
     g.NODES.print_all_data()
-    # print(g.ELEMENTS.get_by_id(2))
+
+    print(f"Printing neighbour nodes for element no.: {(e := 22)}:")
+    g.ELEMENTS.get_by_id(e).surr_nodes.print_all_data()
 
     # Testing
     # for i in g.NODES._array:
