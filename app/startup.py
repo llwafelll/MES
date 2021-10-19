@@ -3,6 +3,7 @@
 # TODO: matplotlib to visualize
 
 import numpy as np
+from logger import *
 
 # TODO: Think about changing datatype of surr_nodes to NodesContainer
 # remember to keep nodes as references
@@ -111,8 +112,12 @@ class NodesContainer:
             print()
     
     def __getitem__(self, pos: tuple):
-        i, j = pos
-        return self._array[i, j]
+        if isinstance(pos, int):
+            return self._array[pos, :]
+
+        else:
+            i, j = pos
+            return self._array[i, j]
         
 
 class Element:
@@ -157,8 +162,12 @@ class ElementsContainer:
             print()
 
     def __getitem__(self, pos: tuple) -> np.ndarray:
-        i, j = pos
-        return self._array[i, j]
+        if isinstance(pos, int):
+            return self._array[pos, :]
+
+        else:
+            i, j = pos
+            return self._array[i, j]
 
 class Grid:
     def __init__(self,
@@ -213,6 +222,12 @@ class Grid:
     def get_nodes_surrouding_element(self, element_id: int) -> np.ndarray:
         return self.NODES.get_nodes_surrounding_element(element_id)
     
+    def print_nodes(self) -> None:
+        self.NODES.print_nodes()
+
+    def print_elements(self) -> None:
+        self.ELEMENTS.print_elements()
+    
     @staticmethod
     def convert_id_to_coord(arg_id: int, height: int):
         x = (arg_id - 1) // height
@@ -223,19 +238,20 @@ class Grid:
 
 
 if __name__ == "__main__":
-    # g = Grid(height=3.3, width=4.2, nodes_vertiacl=3, nodes_horizontal=4)
-    g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
+    g = Grid(height=3.3, width=4.2, nodes_vertiacl=3, nodes_horizontal=4)
+    # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
 
-    print("Printing all nodes ids:")
-    g.NODES.print_nodes()
-    print("\nPrinting all elements ids:")
-    g.ELEMENTS.print_elements()
+    # print("Printing all nodes ids:")
+    # g.NODES.print_nodes()
+    # print("\nPrinting all elements ids:")
+    # g.ELEMENTS.print_elements()
+    printer.log(g, mode={'id': 'ne', 'coor': 'en', 'nofe': '5'})
 
-    print("\nPrinting all nodes with coordinates:")
-    g.NODES.print_all_data()
+    # print("\nPrinting all nodes with coordinates:")
+    # g.NODES.print_all_data()
 
-    print(f"Printing neighbour nodes for element no.: {(e := 22)}:")
-    g.ELEMENTS.get_by_id(e).surr_nodes.print_all_data()
+    # print(f"Printing neighbour nodes for element no.: {(e := 5)}:")
+    # g.ELEMENTS.get_by_id(e).surr_nodes.print_all_data()
 
     # Testing
     # for i in g.NODES._array:
