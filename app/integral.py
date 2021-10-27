@@ -71,44 +71,24 @@ class Integral:
         cls.L = leggauss(value)
         
             
+# f1 = lambda x: 5*x**2 + 3*x + 6
+# f2 = lambda x, y: 5*x**2*y**2 + 3*x*y + 6
+# f3 = lambda x, y, z: 5*x**2 * y**2 * z**3 + 3*x*y*z**2 + 6
+# i3 = Integral(f3, 3)
+# i2 = Integral(f2, 2)
+# i1 = Integral(f1, 1)
 
-f1 = lambda x: 5*x**2 + 3*x + 6
-f2 = lambda x, y: 5*x**2*y**2 + 3*x*y + 6
-f3 = lambda x, y, z: 5*x**2 * y**2 * z**3 + 3*x*y*z**2 + 6
-i3 = Integral(f3, 3)
-i2 = Integral(f2, 2)
-i1 = Integral(f1, 1)
+# print("\nResults for number of points = 3 (default):")
+# print(i1.calculate())
+# print(i1.calculate((2, 3)))
+# print(i2.calculate())
+# print(i2.calculate((2, 3)))
+# print(i3.calculate((2, 3)))
+# print(i3.calculate((-2, 10)))
 
-print("\nResults for number of points = 3 (default):")
-print(i1.calculate())
-print(i1.calculate((2, 3)))
-print(i2.calculate())
-print(i2.calculate((2, 3)))
-print(i3.calculate((2, 3)))
-print(i3.calculate((-2, 10)))
-
-print("\nResults for number of points = 2:")
-Integral.set_number_of_points(2)
-print(i1.calculate())
-print(i1.calculate((2, 3)))
-print(i2.calculate())
-print(i3.calculate((-2, 10)))
-
-# ksi = 0
-# der = np.array([
-#     d_N1eta := lambda ksi: - 1/4 * (1 - ksi),
-#     d_N2eta := lambda ksi: 1/4 * (1 - ksi),
-#     d_N3eta := lambda ksi: 1/4 * (1 + ksi),
-#     d_N4eta := lambda ksi: - 1/4 * (1 + ksi),
-# ])
-
-# L = leggauss(2)
-# _L = np.hstack((L[0], L[0]))[np.newaxis]
-
-# result = np.empty((4, 4))
-# for i, obj in enumerate(result):
-#     for j, _ in enumerate(obj):
-#         result[i, j] = der[j](_L[0, j])
-
-
-# print(result)
+# print("\nResults for number of points = 2:")
+# Integral.set_number_of_points(2)
+# print(i1.calculate())
+# print(i1.calculate((2, 3)))
+# print(i2.calculate())
+# print(i3.calculate((-2, 10)))
