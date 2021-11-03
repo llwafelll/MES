@@ -4,6 +4,9 @@
 
 import numpy as np
 from logger import *
+from numpy.linalg import inv
+from matrix_partial_copy import Element4p_2D
+from termcolor import colored
 
 # TODO: Think about changing datatype of surr_nodes to NodesContainer
 # remember to keep nodes as references
@@ -236,16 +239,57 @@ class Grid:
 
         return x, y
 
+def jakobian(i, j, J, Jinv, e, grid: Grid):
+    part_N_by_eta = e.get_part_N_by_eta()
+    part_N_by_ksi = e.get_part_N_by_ksi()
+
+    NOD = grid.get_element_by_id(i).surr_nodes._array
+    X, Y = zip(*((v.x, v.y) for v in NOD[[1, 1, 0, 0], [0, 1, 1 ,0]]))
+    # X = np.array([NOD[1, 0].x, NOD[1, 1].x, NOD[0, 1].x, NOD[0, 0].x])
+    # Y = np.array([0, 0, .025, .025])
+    # Y = np.array([NOD[1, 0].y, NOD[1, 1].y, NOD[0, 1].y, NOD[0, 0].y])
+
+    # j = punkt calkowania, czy kolejnosc w part_N_by... jest dobra?
+    x = np.sum(part_N_by_ksi[j] * X)
+    y = np.sum(part_N_by_eta[j] * Y)
+
+    # creatge 2x2 matrix with diagonal created based on the provided list
+    Jinv[:, :] = np.diag((x, y))
+    J[:, :] = inv(Jinv)
+    # print("\nMacierz z x, y na przekatnej")
+    # print(M := np.diag((x, y)))
+
+    # print("\nMarcierz Jakobiego:")
+    # print(J := inv(M))
+
+    # print("\n1 / det(J) = ")
+    # print(1 / det(J))
+    # print()
+
 
 if __name__ == "__main__":
-    g = Grid(height=3.3, width=4.2, nodes_vertiacl=3, nodes_horizontal=4)
+    g = Grid(height=3.3, width=4.2, nodes_vertiacl=2, nodes_horizontal=2)
     # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
 
     # print("Printing all nodes ids:")
     # g.NODES.print_nodes()
     # print("\nPrinting all elements ids:")
     # g.ELEMENTS.print_elements()
-    printer.log(g, mode={'id': 'ne', 'coor': 'en', 'nofe': '5'})
+    printer.log(g, mode={'id': 'ne', 'coor': 'en', 'nofe': '1'})
+
+
+    # Vars that will be overriden each iteration
+    Jak = np.empty((2, 2))
+    Jak_inv = np.empty((2, 2))
+    e1 =  Element4p_2D()
+
+    for i in range(g.N_ELEMENTS_TOTAL):
+        # j liczba punktow calkowania
+        for j in range(4):
+            output = jakobian(i, j, Jak, Jak_inv, e1, g)
+            print(f"{colored('Jakobian:', 'red')}\n{Jak}")
+            print(f"{colored('Jakobian inv:', 'cyan')}\n{Jak_inv}\n")
+
 
     # print("\nPrinting all nodes with coordinates:")
     # g.NODES.print_all_data()
