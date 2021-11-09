@@ -4,14 +4,14 @@
 
 import numpy as np
 from logger import *
-from numpy.linalg import inv
+from numpy.linalg import inv, det
 from matrix_partial_copy import Element4p_2D
 from termcolor import colored
 
 # TODO: Think about changing datatype of surr_nodes to NodesContainer
 # remember to keep nodes as references
 
-
+K = 30
 class Node:
     _counter: int = 1
     
@@ -135,8 +135,17 @@ class Element:
                 n_nodes=(2, 2),
                 arg_nodes=arg_nodes.get_nodes_surrounding_element(self._id)
                 )
+        # [pc1, pc2, pc3, pc4]
+        self.H: np.ndarray = np.empty((4, 4, 4))
 
         Element._counter += 1
+    
+    def get_H(self) -> np.ndarray:
+        result = np.zeros((4, 4));
+        for i in self.H:
+            result += i
+        
+        return result
 
 
 class ElementsContainer:
@@ -153,6 +162,11 @@ class ElementsContainer:
         x, y = Grid.convert_id_to_coord(id, self.shape[0])
 
         return self[y, x]
+
+    def get_obj_by_id(self, id: int) -> Element:
+        x, y = Grid.convert_id_to_coord(id, self.shape[0])
+
+        return self._array[y, x]
 
 
     def print_elements(self):
@@ -250,12 +264,16 @@ def jakobian(i, j, J, Jinv, e, grid: Grid):
     # Y = np.array([NOD[1, 0].y, NOD[1, 1].y, NOD[0, 1].y, NOD[0, 0].y])
 
     # j = punkt calkowania, czy kolejnosc w part_N_by... jest dobra?
-    x = np.sum(part_N_by_ksi[j] * X)
-    y = np.sum(part_N_by_eta[j] * Y)
+    dxdksi = np.sum(part_N_by_ksi[j] * X)
+    dydeta = np.sum(part_N_by_eta[j] * Y)
+
+    dxdeta = np.sum(part_N_by_eta[j] * X)
+    dydksi = np.sum(part_N_by_ksi[j] * Y)
 
     # creatge 2x2 matrix with diagonal created based on the provided list
-    Jinv[:, :] = np.diag((x, y))
-    J[:, :] = inv(Jinv)
+    J[:, :] = np.diag((dxdksi, dydeta))
+    np.fill_diagonal(J[:, ::-1], [-dxdeta, -dydksi])
+    Jinv[:, :] = inv(J)
     # print("\nMacierz z x, y na przekatnej")
     # print(M := np.diag((x, y)))
 
@@ -268,7 +286,7 @@ def jakobian(i, j, J, Jinv, e, grid: Grid):
 
 
 if __name__ == "__main__":
-    g = Grid(height=3.3, width=4.2, nodes_vertiacl=2, nodes_horizontal=2)
+    g = Grid(height=.2, width=.1, nodes_vertiacl=5, nodes_horizontal=4)
     # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
 
     # print("Printing all nodes ids:")
@@ -278,17 +296,50 @@ if __name__ == "__main__":
     printer.log(g, mode={'id': 'ne', 'coor': 'en', 'nofe': '1'})
 
 
+    # TODO: refector this to make this OO
     # Vars that will be overriden each iteration
     Jak = np.empty((2, 2))
     Jak_inv = np.empty((2, 2))
     e1 =  Element4p_2D()
 
+    part_N_by_x = np.empty((4, 4))
+    part_N_by_y = np.empty((4, 4))
+
     for i in range(g.N_ELEMENTS_TOTAL):
         # j liczba punktow calkowania
         for j in range(4):
-            output = jakobian(i, j, Jak, Jak_inv, e1, g)
+            jakobian(i, j, Jak, Jak_inv, e1, g)
             print(f"{colored('Jakobian:', 'red')}\n{Jak}")
             print(f"{colored('Jakobian inv:', 'cyan')}\n{Jak_inv}\n")
+
+            part_N_by_eta = e1.get_part_N_by_eta()
+            part_N_by_ksi = e1.get_part_N_by_ksi()
+
+            # Transition to dN/dx, dN/dy
+            # w - [dN/dksi, dN/deta] vector
+            w = np.array(list(zip(part_N_by_ksi[j], part_N_by_eta[j])))
+            for k in range(4):
+                part_N_by_x[j, k], part_N_by_y[j, k] = Jak_inv@w[k]
+
+            for k in range(4):
+                g.ELEMENTS.get_obj_by_id(i).H[k] = (tem := K * (part_N_by_x*part_N_by_x.T + part_N_by_y*part_N_by_y.T) * det(Jak))
+                # print(g.ELEMENTS.get_obj_by_id(i).H[k])
+            print(g.ELEMENTS.get_obj_by_id(i).get_H())
+
+            # print(part_N_by_x)
+            # print(part_N_by_y)
+            # print(w[j][np.newaxis])
+            # print(Jak)
+            # print((1/det(Jak) * Jak_inv)@w[j])
+    # print(part_N_by_ksi)
+    # print(part_N_by_eta)
+    # print(part_N_by_x)
+    # print(part_N_by_y)
+
+
+
+
+
 
 
     # print("\nPrinting all nodes with coordinates:")
