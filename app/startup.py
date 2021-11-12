@@ -8,7 +8,7 @@ from logger import *
 from numpy.linalg import inv, det
 from matrix_partial_copy import Element4p_2D
 from termcolor import colored
-from typing import Union
+from typing import Type, Union
 from enum import Enum, auto
 
 # TODO: Think about changing datatype of surr_nodes to NodesContainer
@@ -55,6 +55,13 @@ class NodesContainer:
                     self._array[row, col] = arg_nodes[row, col]
                     
             self.shape = self._array.shape
+
+            # Initialize arrays whose contain references to Nodes on the edge
+            self.left_nodes: np.ndarray = a if self.is_corner(a := self._array[:, 0]) else None
+            self.right_nodes: np.ndarray = a if self.is_corner(a := self._array[:, -1]) else None
+            self.down_nodes: np.ndarray = a if self.is_corner(a := self._array[-1, :]) else None
+            self.up_nodes: np.ndarray = a if self.is_corner(a := self._array[0, :]) else None
+            print()
         
         # Creates entirely new nodes (from scratch)
         elif size:
@@ -91,12 +98,19 @@ class NodesContainer:
             
             self.shape = self._array.shape
 
-        # Initialize arrays whose contain references to Nodes on the edge
-        self.left_nodes: np.ndarray = self._array[:, 0]
-        self.right_nodes: np.ndarray = self._array[:, -1]
-        self.down_nodes: np.ndarray = self._array[-1, :]
-        self.up_nodes: np.ndarray = self._array[0, :]
+            # Initialize arrays whose contain references to Nodes on the edge
+            self.left_nodes: np.ndarray = self._array[:, 0]
+            self.right_nodes: np.ndarray = self._array[:, -1]
+            self.down_nodes: np.ndarray = self._array[-1, :]
+            self.up_nodes: np.ndarray = self._array[0, :]
         
+    def is_corner(self, arr: np.ndarray) -> bool:
+        result = True
+        for i in arr:
+            result &= i.is_edge
+        
+        return result
+
     def get_nodes_surrounding_element(self, element_id: int) -> np.ndarray:
         '''This method returns elements that are neighbours of the
         element which id is passed as argument.'''
@@ -166,6 +180,28 @@ class Element:
                 )
         # [pc1, pc2, pc3, pc4]
         self.H: np.ndarray = np.empty((4, 4, 4))
+
+        # Print coordinates which are on edge for each element 
+        # print(colored(f"Element {self._id}", 'red', attrs=('bold', )))
+        # try:
+        #     print('left', [(n.x, n.y) for n in self.surr_nodes.left_nodes])
+        # except TypeError:
+        #     print('none type, skipping')
+
+        # try:
+        #     print('right', [(n.x, n.y) for n in self.surr_nodes.right_nodes])
+        # except TypeError:
+        #     print('none type, skipping')
+
+        # try:
+        #     print('up', [(n.x, n.y) for n in self.surr_nodes.up_nodes])
+        # except TypeError:
+        #     print('none type, skipping')
+
+        # try:
+        #     print('down', [(n.x, n.y) for n in self.surr_nodes.down_nodes])
+        # except TypeError:
+        #     print('none type, skipping')
 
         Element._counter += 1
     
@@ -346,6 +382,7 @@ if __name__ == "__main__":
     # TODO: refector this to make this OO
     # Vars that will be overriden each iteration
     if mode == Mode.OPTION2:
+        printer.log(g, mode={'coor': 'e'})
         Jak = np.empty((2, 2))
         Jak_inv = np.empty((2, 2))
         e1:Element4p_2D =  Element4p_2D()
@@ -353,50 +390,21 @@ if __name__ == "__main__":
         part_N_by_x = np.empty((4, 4))
         part_N_by_y = np.empty((4, 4))
 
-        # QUESTION: It shoudl be a generator (Jacobian part only)???????????????????????????????????????
-        # should be in grid class (as static or non static mtethod?)
         for i in range(g.N_ELEMENTS_TOTAL):
             # j liczba punktow calkowania
             for j in range(4):
                 e1.calc_derivatives_global_coordinates(i, j, g)
-                # Grid.jakobian(i, j, Jak, Jak_inv, e1, g)
-
-                # # get use argument of a function to set verbose or not
-                # print(f"{colored('Jakobian:', 'red')}\n{Jak}")
-                # print(f"{colored('Jakobian inv:', 'cyan')}\n{Jak_inv}\n")
-
-                # part_N_by_eta = e1.get_part_N_by_eta()
-                # part_N_by_ksi = e1.get_part_N_by_ksi()
-
-                # # Transition to dN/dx, dN/dy
-                # # w - [dN/dksi, dN/deta] vector
-                # w = np.array(list(zip(part_N_by_ksi[j], part_N_by_eta[j])))
-                # for k in range(4):
-                #     part_N_by_x[j, k], part_N_by_y[j, k] = Jak_inv@w[k]
-
-                # for k in range(4):
             
             for j in range(4):
                 integral_function = \
                     lambda: (e1.get_part_N_x()[j][:, np.newaxis] * e1.get_part_N_x()[j] +
                             e1.get_part_N_y()[j][:, np.newaxis] * e1.get_part_N_y()[j])
 
-                # print(integral_function())
                 g.ELEMENTS.get_obj_by_id(i).H[j] = \
                     (K * integral_function() * det(e1.J))
-                # print(g.ELEMENTS.get_obj_by_id(i).H[j])
-                    
-                # print("Jakobian:")
-                # print(e1.J)
-                # print("Wyznacznik macierzy Jakobiego")
-                # print(det(e1.J))
-                # print("Wyznacznik odwroconej macierzy Jakobiego")
-                # print(det(e1.Jinv))
-                # e1.show_results()
 
-
-            # print(g.ELEMENTS.get_obj_by_id(i).H[k])
-            print(f"Element no. {i}")
+            print(colored(f"Elements no. {i} H value:",
+                          "red", attrs=('bold', 'underline', )))
             print(g.ELEMENTS.get_obj_by_id(i).get_H())
 
                 # print(part_N_by_x)
@@ -408,11 +416,6 @@ if __name__ == "__main__":
         # print(part_N_by_eta)
         # print(part_N_by_x)
         # print(part_N_by_y)
-
-
-
-
-
 
 
     # print("\nPrinting all nodes with coordinates:")
