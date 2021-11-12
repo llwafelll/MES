@@ -2,6 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from itertools import cycle, zip_longest
 from numpy import array, newaxis
+from termcolor import colored
 
 class GridPrinter(ABC):
     def __init__(self) -> None:
@@ -34,15 +35,15 @@ class GridLogger(ABC):
         for Ncol, Ecol in zip_longest(nodes, elements, fillvalue=[]):
             d: str = strlen - 2
             for node in Ncol:
-                print(f"id:{node._id:0>2d}", end='')
-                print(f"x:{node.x:0=2.2f}", end='')
-                print(f"y:{node.y:0=2.2f} | ", end='')
+                print(colored(f"id:{node._id:0>2d}", 'cyan'), end='')
+                print(colored(f"x:{node.x:0=2.2f}", 'red'), end='')
+                print(colored(f"y:{node.y:0=2.2f}", 'green') + " | ", end='')
                 
             print()
             print('-' * (d+1), end='') if Ecol != array([]) or initial else None
 
             for edge in Ecol:
-                print(f"id:{edge._id:0>2d}", end='-' * d)
+                print(colored(f"id:{edge._id:0>2d}", 'cyan', attrs=('bold', )), end='-' * d)
                 
             initial = False
             print()
@@ -76,7 +77,6 @@ class GridConsoleLogger(GridLogger):
             # the biggest grid to print
             # line_len: int = (self.STR_LEN + 3) * self.grid.N_NODES_HORIZONTAL - 1
 
-        
         if 'nofe' in mode:
             id: int = int(mode['nofe'])
             element = array([self.grid.ELEMENTS.get_by_id(id)])[newaxis]
