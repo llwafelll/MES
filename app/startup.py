@@ -2,11 +2,14 @@
 # https://www.youtube.com/watch?v=vBH6GRJ1REM
 # TODO: matplotlib to visualize
 
+from __future__ import annotations
 import numpy as np
 from logger import *
 from numpy.linalg import inv, det
 from matrix_partial_copy import Element4p_2D
 from termcolor import colored
+from typing import Union
+from enum import Enum, auto
 
 # TODO: Think about changing datatype of surr_nodes to NodesContainer
 # remember to keep nodes as references
@@ -15,10 +18,13 @@ K = 30
 class Node:
     _counter: int = 1
     
-    def __init__(self, arg_x: float, arg_y: float) -> None:
+    def __init__(self, arg_x: float, arg_y: float, arg_edge: dict) -> None:
         self.x: float = arg_x
         self.y: float = arg_y
         
+        self.edge = arg_edge
+        self.is_edge = any(self.edge.values())
+        self.is_corner = len([i for i in self.edge.values() if i]) == 2
         self._id: int = Node._counter
         Node._counter += 1
     
@@ -47,11 +53,14 @@ class NodesContainer:
             for col in range(n_nodes[1]):
                 for row in reversed(range(n_nodes[0])):
                     self._array[row, col] = arg_nodes[row, col]
+                    
+            self.shape = self._array.shape
         
         # Creates entirely new nodes (from scratch)
         elif size:
             # n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
             self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
+
 
             # dh - delta height, dw - delta width
             dh: float = size[0]/(n_nodes[0] - 1)
@@ -63,10 +72,30 @@ class NodesContainer:
                 for row in reversed(range(n_nodes[0])):
                     pos_x: float = dw * col
                     pos_y: float = dh * (n_nodes[0] - 1 - row)
+                    
+                    # 'edge' dictionary contains addional information whether
+                    # Node is on a verge
+                    edge = dict(zip_longest(['Left', 'Right', 'Down', 'Up'],
+                                            (), fillvalue=False))
+                    if pos_x == 0:
+                        edge['Left'] = True
+                    if pos_x == size[1]:
+                        edge['Right'] = True
+                    if pos_y == 0: 
+                        edge['Down'] = True
+                    if pos_y == size[0]:
+                        edge['Up'] = True
 
-                    self._array[row, col] = Node(pos_x, pos_y)
+                    # Initialize node and put in right position in array
+                    self._array[row, col] = Node(pos_x, pos_y, edge)
             
             self.shape = self._array.shape
+
+        # Initialize arrays whose contain references to Nodes on the edge
+        self.left_nodes: np.ndarray = self._array[:, 0]
+        self.right_nodes: np.ndarray = self._array[:, -1]
+        self.down_nodes: np.ndarray = self._array[-1, :]
+        self.up_nodes: np.ndarray = self._array[0, :]
         
     def get_nodes_surrounding_element(self, element_id: int) -> np.ndarray:
         '''This method returns elements that are neighbours of the
@@ -210,7 +239,7 @@ class Grid:
                                                     size=self.get_size())
 
         # Initialization of the elements. NodesContainer has to be initialized
-        # firstly
+        # first
         self.ELEMENTS: ElementsContainer = \
             ElementsContainer(self.get_n_elements(), self.NODES)
 
@@ -253,88 +282,132 @@ class Grid:
 
         return x, y
 
-def jakobian(i, j, J, Jinv, e, grid: Grid):
-    part_N_by_eta = e.get_part_N_by_eta()
-    part_N_by_ksi = e.get_part_N_by_ksi()
+    @staticmethod
+    def jakobian(element_id: Union[int, Element], row, J, Jinv,
+                 e: Element4p_2D, grid: Union[Grid, None] = None):
 
-    NOD = grid.get_element_by_id(i).surr_nodes._array
-    X, Y = zip(*((v.x, v.y) for v in NOD[[1, 1, 0, 0], [0, 1, 1 ,0]]))
-    # X = np.array([NOD[1, 0].x, NOD[1, 1].x, NOD[0, 1].x, NOD[0, 0].x])
-    # Y = np.array([0, 0, .025, .025])
-    # Y = np.array([NOD[1, 0].y, NOD[1, 1].y, NOD[0, 1].y, NOD[0, 0].y])
+        part_N_by_eta = e.get_part_N_by_eta()
+        part_N_by_ksi = e.get_part_N_by_ksi()
 
-    # j = punkt calkowania, czy kolejnosc w part_N_by... jest dobra?
-    dxdksi = np.sum(part_N_by_ksi[j] * X)
-    dydeta = np.sum(part_N_by_eta[j] * Y)
+        NOD: np.ndarray
+        if isinstance(element_id, int) and grid:
+            NOD = grid.get_element_by_id(element_id).surr_nodes._array
+        elif isinstance(element_id, Element):
+            NOD = element_id.surr_nodes
+        else:
+            raise Exception("Invalid argument type for 'element_id'.")
 
-    dxdeta = np.sum(part_N_by_eta[j] * X)
-    dydksi = np.sum(part_N_by_ksi[j] * Y)
+        X, Y = zip(*((v.x, v.y) for v in NOD[[1, 1, 0, 0], [0, 1, 1 ,0]]))
+        # X = np.array([NOD[1, 0].x, NOD[1, 1].x, NOD[0, 1].x, NOD[0, 0].x])
+        # Y = np.array([0, 0, .025, .025])
+        # Y = np.array([NOD[1, 0].y, NOD[1, 1].y, NOD[0, 1].y, NOD[0, 0].y])
 
-    # creatge 2x2 matrix with diagonal created based on the provided list
-    J[:, :] = np.diag((dxdksi, dydeta))
-    np.fill_diagonal(J[:, ::-1], [-dxdeta, -dydksi])
-    Jinv[:, :] = inv(J)
-    # print("\nMacierz z x, y na przekatnej")
-    # print(M := np.diag((x, y)))
+        # j = punkt calkowania, czy kolejnosc w part_N_by... jest dobra?
+        dxdksi = np.sum(part_N_by_ksi[row] * X)
+        dydeta = np.sum(part_N_by_eta[row] * Y)
 
-    # print("\nMarcierz Jakobiego:")
-    # print(J := inv(M))
+        dxdeta = np.sum(part_N_by_eta[row] * X)
+        dydksi = np.sum(part_N_by_ksi[row] * Y)
 
-    # print("\n1 / det(J) = ")
-    # print(1 / det(J))
-    # print()
+        # creatge 2x2 matrix with diagonal created based on the provided list
+        J[:, :] = np.diag((dxdksi, dydeta))
+        np.fill_diagonal(J[:, ::-1], [-dxdeta, -dydksi])
+        Jinv[:, :] = inv(J)
+        # print("\nMacierz z x, y na przekatnej")
+        # print(M := np.diag((x, y)))
+
+        # print("\nMarcierz Jakobiego:")
+        # print(J := inv(M))
+
+        # print("\n1 / det(J) = ")
+        # print(1 / det(J))
+        # print()
+
+class Mode(Enum):
+    ALL = auto()
+    OPTION1 = auto()
+    OPTION2 = auto()
+    OPTION3 = auto()
 
 
 if __name__ == "__main__":
-    g = Grid(height=.2, width=.1, nodes_vertiacl=5, nodes_horizontal=4)
+    
+    mode = Mode.OPTION2
+    g = Grid(height=0.025, width=0.025, nodes_vertiacl=2, nodes_horizontal=2)
     # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
 
     # print("Printing all nodes ids:")
     # g.NODES.print_nodes()
     # print("\nPrinting all elements ids:")
     # g.ELEMENTS.print_elements()
-    printer.log(g, mode={'id': 'ne', 'coor': 'en', 'nofe': '1'})
-
+    if mode == Mode.OPTION1:
+        printer.log(g, mode={'id': 'ne', 'coor': 'en', 'nofe': '1'})
 
     # TODO: refector this to make this OO
     # Vars that will be overriden each iteration
-    Jak = np.empty((2, 2))
-    Jak_inv = np.empty((2, 2))
-    e1 =  Element4p_2D()
+    if mode == Mode.OPTION2:
+        Jak = np.empty((2, 2))
+        Jak_inv = np.empty((2, 2))
+        e1:Element4p_2D =  Element4p_2D()
+        
+        part_N_by_x = np.empty((4, 4))
+        part_N_by_y = np.empty((4, 4))
 
-    part_N_by_x = np.empty((4, 4))
-    part_N_by_y = np.empty((4, 4))
+        # QUESTION: It shoudl be a generator (Jacobian part only)???????????????????????????????????????
+        # should be in grid class (as static or non static mtethod?)
+        for i in range(g.N_ELEMENTS_TOTAL):
+            # j liczba punktow calkowania
+            for j in range(4):
+                e1.calc_derivatives_global_coordinates(i, j, g)
+                # Grid.jakobian(i, j, Jak, Jak_inv, e1, g)
 
-    for i in range(g.N_ELEMENTS_TOTAL):
-        # j liczba punktow calkowania
-        for j in range(4):
-            jakobian(i, j, Jak, Jak_inv, e1, g)
-            print(f"{colored('Jakobian:', 'red')}\n{Jak}")
-            print(f"{colored('Jakobian inv:', 'cyan')}\n{Jak_inv}\n")
+                # # get use argument of a function to set verbose or not
+                # print(f"{colored('Jakobian:', 'red')}\n{Jak}")
+                # print(f"{colored('Jakobian inv:', 'cyan')}\n{Jak_inv}\n")
 
-            part_N_by_eta = e1.get_part_N_by_eta()
-            part_N_by_ksi = e1.get_part_N_by_ksi()
+                # part_N_by_eta = e1.get_part_N_by_eta()
+                # part_N_by_ksi = e1.get_part_N_by_ksi()
 
-            # Transition to dN/dx, dN/dy
-            # w - [dN/dksi, dN/deta] vector
-            w = np.array(list(zip(part_N_by_ksi[j], part_N_by_eta[j])))
-            for k in range(4):
-                part_N_by_x[j, k], part_N_by_y[j, k] = Jak_inv@w[k]
+                # # Transition to dN/dx, dN/dy
+                # # w - [dN/dksi, dN/deta] vector
+                # w = np.array(list(zip(part_N_by_ksi[j], part_N_by_eta[j])))
+                # for k in range(4):
+                #     part_N_by_x[j, k], part_N_by_y[j, k] = Jak_inv@w[k]
 
-            for k in range(4):
-                g.ELEMENTS.get_obj_by_id(i).H[k] = (tem := K * (part_N_by_x*part_N_by_x.T + part_N_by_y*part_N_by_y.T) * det(Jak))
-                # print(g.ELEMENTS.get_obj_by_id(i).H[k])
+                # for k in range(4):
+            
+            for j in range(4):
+                integral_function = \
+                    lambda: (e1.get_part_N_x()[j][:, np.newaxis] * e1.get_part_N_x()[j] +
+                            e1.get_part_N_y()[j][:, np.newaxis] * e1.get_part_N_y()[j])
+
+                # print(integral_function())
+                g.ELEMENTS.get_obj_by_id(i).H[j] = \
+                    (K * integral_function() * det(e1.J))
+                # print(g.ELEMENTS.get_obj_by_id(i).H[j])
+                    
+                # print("Jakobian:")
+                # print(e1.J)
+                # print("Wyznacznik macierzy Jakobiego")
+                # print(det(e1.J))
+                # print("Wyznacznik odwroconej macierzy Jakobiego")
+                # print(det(e1.Jinv))
+                # e1.show_results()
+
+
+            # print(g.ELEMENTS.get_obj_by_id(i).H[k])
+            print(f"Element no. {i}")
             print(g.ELEMENTS.get_obj_by_id(i).get_H())
 
-            # print(part_N_by_x)
-            # print(part_N_by_y)
-            # print(w[j][np.newaxis])
-            # print(Jak)
-            # print((1/det(Jak) * Jak_inv)@w[j])
-    # print(part_N_by_ksi)
-    # print(part_N_by_eta)
-    # print(part_N_by_x)
-    # print(part_N_by_y)
+                # print(part_N_by_x)
+                # print(part_N_by_y)
+                # print(w[j][np.newaxis])
+                # print(Jak)
+                # print((1/det(Jak) * Jak_inv)@w[j])
+        # print(part_N_by_ksi)
+        # print(part_N_by_eta)
+        # print(part_N_by_x)
+        # print(part_N_by_y)
 
 
 
@@ -374,3 +447,18 @@ if __name__ == "__main__":
     #     print()
 
     # print()
+
+    if mode == Mode.OPTION3:
+        X = np.array([0, .025, 0, 0.025])
+        Y = np.array([.025, .025, 0, 0])
+
+        nodes: np.ndarray = np.array([Node(arg_x=x, arg_y=y) for x, y in zip(X, Y)]).reshape((2, 2))
+        nodes_container = NodesContainer(n_nodes=(2, 2), arg_nodes=nodes)    
+        nodes_container.print_all_data()
+        element = Element(nodes_container)
+        element.surr_nodes = nodes
+
+        e1 = Element4p_2D()
+        for row in range(4):
+            Grid.jakobian(element, row, e1.J, e1.Jinv, e1)
+        e1.show_results()
