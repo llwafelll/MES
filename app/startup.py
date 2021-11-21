@@ -76,7 +76,7 @@ class NodesContainer:
         '''
         ARGS:
         n_nodes - number of nodes, respectively, in y and x axis
-        n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
+                  tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
         size - real lenght (in [cm]), respectively, in y and x axis 
         arg_nodes - two dimensional array with refs to existing nodes
         
@@ -104,8 +104,6 @@ class NodesContainer:
         # create NodesContainer whose _array keep references certain nodes.
         # Probably runs while creating _surr_nodes
         if arg_nodes.size and arg_nodes.ndim == 2:
-            # TODEL
-            # self._array: np.array = np.empty(n_nodes, dtype=Node)
 
             # Initialize _array using provided array "arg_nodes"
             for row in range(n_nodes[0]):
@@ -124,11 +122,6 @@ class NodesContainer:
                     self.edge_nodes = [self.left_nodes, self.right_nodes,
                                     self.top_nodes, self.bottom_nodes]
 
-            # TODEL
-            # for col in range(n_nodes[1]):
-            #     for row in reversed(range(n_nodes[0])):
-            #         self._array[row, col] = arg_nodes[row, col]
-        
         # GENERATE THE GRID:
         # Creates entirely new array of nodes (from scratch).
         # The width and height is divided by number of nodes then each node
@@ -136,8 +129,6 @@ class NodesContainer:
         # This procedure should be executed only once while initializing
         # a new grid.
         elif size:
-            # TODEL
-            # self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
 
             # dh - delta height, dw - delta width
             dh: float = size[0]/(n_nodes[0] - 1)
@@ -173,9 +164,10 @@ class NodesContainer:
                 
         self.shape = self._array.shape
 
-    def get_nodes_surrounding_element(self, element_id: int) -> np.ndarray:
+    def _get_nodes_surrounding_element(self, element_id: int) -> np.ndarray:
         '''This method returns elements that are neighbours of the
-        element which id is passed as argument.'''
+        element which id is passed as argument.
+        This method is used by NodesContainer constuctor'''
 
         # Get coordinates for elementContainer array based on element id
         # note: self.shape is shape for nodeContainer
@@ -238,7 +230,7 @@ class Element:
         self.surr_nodes: NodesContainer = \
             NodesContainer(
                 n_nodes=(2, 2),
-                arg_nodes=arg_nodes.get_nodes_surrounding_element(self._id)
+                arg_nodes=arg_nodes._get_nodes_surrounding_element(self._id)
                 )
         # [pc1, pc2, pc3, pc4]
         self.H: np.ndarray = np.empty((4, 4, 4))
@@ -277,11 +269,20 @@ class Element:
 
 
 class ElementsContainer:
-    def __init__(self, size: tuple, nodes: NodesContainer) -> None:
-        self._array: np.ndarray = np.empty(size, dtype=Element)
+    def __init__(self, n_elements: tuple, nodes: NodesContainer) -> None:
+        '''
+        ARGS:
+        n_elements - number of elements, respectively, in y and x axis
+        nodes - all nodes of the grid
+        '''
+
+        self._array: np.ndarray = np.empty(n_elements, dtype=Element)
         
-        for col in range(size[1]):
-            for row in reversed(range(size[0])):
+        for col in range(n_elements[1]):
+            for row in reversed(range(n_elements[0])):
+                
+                # Elements constructor creates proper surr_nodes based on
+                # elements id
                 self._array[row, col] = Element(nodes)
         
         self.shape = self._array.shape
@@ -365,7 +366,7 @@ class Grid:
         return self.NODES.get_by_id(node_id)
     
     def get_nodes_surrouding_element(self, element_id: int) -> np.ndarray:
-        return self.NODES.get_nodes_surrounding_element(element_id)
+        return self.NODES._get_nodes_surrounding_element(element_id)
     
     def print_nodes(self) -> None:
         self.NODES.print_nodes()
@@ -381,6 +382,18 @@ class Grid:
     
     @staticmethod
     def convert_id_to_coord(arg_id: int, height: int):
+        '''
+        Returns x and y coordinates based on id of element/node
+
+        ARGS:
+        arg_id - id of element/node
+        height - number of elements in y axis
+
+        EXAMPLE:
+        self.convert_id_to_coord(5, 3) -> (1, 1)
+        self.convert_id_to_coord(5, 4) -> (1, 3)
+        '''
+        
         x = (arg_id - 1) // height
         y = (arg_id - 1) % height
         y = ((height - 1) - y)
