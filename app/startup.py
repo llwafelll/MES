@@ -10,21 +10,34 @@ from matrix_partial_copy import Element4p_2D
 from termcolor import colored
 from typing import Type, Union
 from enum import Enum, auto
+import itertools as it
 
 # TODO: Think about changing datatype of surr_nodes to NodesContainer
 # remember to keep nodes as references
 
 K = 30
+ALPHA = 25
+
+class Direction(Enum): 
+    LEFT = auto()
+    RIGHT = auto()
+    TOP = auto()
+    BOTTOM = auto()
+
 class Node:
     _counter: int = 1
     
-    def __init__(self, arg_x: float, arg_y: float, arg_edge: dict) -> None:
+    def __init__(self, arg_x: float, arg_y: float) -> None:
         self.x: float = arg_x
         self.y: float = arg_y
+
+        self.edge = {
+            "is_left": False,
+            "is_right": False,
+            "is_top": False,
+            "is_bottom": False
+        }
         
-        self.edge = arg_edge
-        self.is_edge = any(self.edge.values())
-        self.is_corner = len([i for i in self.edge.values() if i]) == 2
         self._id: int = Node._counter
         Node._counter += 1
     
@@ -34,82 +47,131 @@ class Node:
     def get_id(self):
         return self._id
     
+    def set_edge(self, *args, **kwargs):
+        if kwargs:
+            for k, v in kwargs.items():
+                self.edge[k] = v
+            
+        elif args:
+            for k, v in zip(self.edge.keys(), args):
+                self.edge[k] = v
 
+    def update_edge(self, *args, **kwargs):
+        if kwargs:
+            for k, v in kwargs.items():
+                self.edge[k] += v
+            
+        elif args:
+            for k, v in zip(self.edge.keys(), args):
+                self.edge[k] += v
+    
+    def is_edge(self):
+        return any(self.edge.values())
+
+
+# TODO: NodesContainer should receive NodesContainer instead of np.ndarray
 class NodesContainer:
     def __init__(self, n_nodes: tuple, size: tuple = None,
                  arg_nodes: np.ndarray = np.array([])) -> None:
-        '''The constructor for NodesContainer works in two modes.
+        '''
+        ARGS:
+        n_nodes - number of nodes, respectively, in y and x axis
+        n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
+        size - real lenght (in [cm]), respectively, in y and x axis 
+        arg_nodes - two dimensional array with refs to existing nodes
+        
+        DESC:
+        The constructor for NodesContainer works in two modes.
         MODE_1: privide arg_nodes numpy array and n_nodes to create 
                 new NodeContaier which holds references to the arg_nodes objects. 
         MDOE_2: provide size and n_nodes to create new array of the nodes
                 from scratch.
         '''
+
+        # Crucial attribute of the class, while initialized should contain nodes
+        self._array = np.empty(n_nodes, dtype=Node);
+
+        # Declaration of arrays with edge nodes
+        self.left_nodes = None
+        self.right_nodes = None
+        self.top_nodes = None
+        self.bottom_nodes = None
+        self.edge_nodes = None
                 
-        # Creates NodesContainer whose _array keep references certain nodes
-        if arg_nodes.size:
-            self._array: np.array = np.empty(n_nodes, dtype=Node)
+        # CREATE NodeContainer for _surr_nodes
+        # If arg_nodes has been provided (size is not empty) and it's
+        # dimension is equal to 2 (required) then
+        # create NodesContainer whose _array keep references certain nodes.
+        # Probably runs while creating _surr_nodes
+        if arg_nodes.size and arg_nodes.ndim == 2:
+            # TODEL
+            # self._array: np.array = np.empty(n_nodes, dtype=Node)
 
-            # Loop that rewrites adresses of the objects from passed array
-            for col in range(n_nodes[1]):
-                for row in reversed(range(n_nodes[0])):
+            # Initialize _array using provided array "arg_nodes"
+            for row in range(n_nodes[0]):
+                for col in range(n_nodes[1]):
                     self._array[row, col] = arg_nodes[row, col]
-                    
-            self.shape = self._array.shape
 
-            # Initialize arrays whose contain references to Nodes on the edge
-            self.left_nodes: np.ndarray = a if self.is_corner(a := self._array[:, 0]) else None
-            self.right_nodes: np.ndarray = a if self.is_corner(a := self._array[:, -1]) else None
-            self.down_nodes: np.ndarray = a if self.is_corner(a := self._array[-1, :]) else None
-            self.up_nodes: np.ndarray = a if self.is_corner(a := self._array[0, :]) else None
-            print()
+                    if self._array[row, col].edge["is_left"]:
+                        self.left_nodes = self._array[:, 0]
+                    if self._array[row, col].edge["is_right"]:
+                        self.right_nodes = self._array[:, -1]
+                    if self._array[row, col].edge["is_top"]:
+                        self.top_nodes = self._array[0, :]
+                    if self._array[row, col].edge["is_bottom"]:
+                        self.bottom_nodes = self._array[-1, :]
+
+                    self.edge_nodes = [self.left_nodes, self.right_nodes,
+                                    self.top_nodes, self.bottom_nodes]
+
+            # TODEL
+            # for col in range(n_nodes[1]):
+            #     for row in reversed(range(n_nodes[0])):
+            #         self._array[row, col] = arg_nodes[row, col]
         
-        # Creates entirely new nodes (from scratch)
+        # GENERATE THE GRID:
+        # Creates entirely new array of nodes (from scratch).
+        # The width and height is divided by number of nodes then each node
+        # received it's coordinates.
+        # This procedure should be executed only once while initializing
+        # a new grid.
         elif size:
-            # n_nodes: tuple -> N_NODES_VERTICAL, N_NODES_HORIZONTAL
-            self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
-
+            # TODEL
+            # self._array: np.ndarray = np.empty(n_nodes, dtype=Node)
 
             # dh - delta height, dw - delta width
             dh: float = size[0]/(n_nodes[0] - 1)
             dw: float = size[1]/(n_nodes[1] - 1)
             
             # Loop that calculates coordinates and uses them to construct
-            # new Node objects
+            # new Node objects.
+            # First loop col then reversed rows in order to set ids in proper
+            # order
             for col in range(n_nodes[1]):
                 for row in reversed(range(n_nodes[0])):
-                    pos_x: float = dw * col
-                    pos_y: float = dh * (n_nodes[0] - 1 - row)
+                    pos_x: float = dw * col 
+                    pos_y: float = dh * (n_nodes[1] - row - 1)
                     
-                    # 'edge' dictionary contains addional information whether
-                    # Node is on a verge
-                    edge = dict(zip_longest(['Left', 'Right', 'Down', 'Up'],
-                                            (), fillvalue=False))
-                    if pos_x == 0:
-                        edge['Left'] = True
-                    if pos_x == size[1]:
-                        edge['Right'] = True
-                    if pos_y == 0: 
-                        edge['Down'] = True
-                    if pos_y == size[0]:
-                        edge['Up'] = True
-
                     # Initialize node and put in right position in array
-                    self._array[row, col] = Node(pos_x, pos_y, edge)
-            
-            self.shape = self._array.shape
+                    self._array[row, col] = Node(pos_x, pos_y)
 
-            # Initialize arrays whose contain references to Nodes on the edge
-            self.left_nodes: np.ndarray = self._array[:, 0]
-            self.right_nodes: np.ndarray = self._array[:, -1]
-            self.down_nodes: np.ndarray = self._array[-1, :]
-            self.up_nodes: np.ndarray = self._array[0, :]
-        
-    def is_corner(self, arr: np.ndarray) -> bool:
-        result = True
-        for i in arr:
-            result &= i.is_edge
-        
-        return result
+            # Fill edge_nodes
+            self.left_nodes = self._array[:, 0]
+            self.right_nodes = self._array[:, -1]
+            self.top_nodes = self._array[0, :]
+            self.bottom_nodes = self._array[-1, :]
+            self.edge_nodes = [self.left_nodes, self.right_nodes,
+                               self.top_nodes, self.bottom_nodes]
+            
+            # Update information in each Node
+            # set_edte accept args and interprests it as follows
+            # [left, right, top, bottom]
+            for en_i, en in enumerate(self.edge_nodes):
+                    value = [i == en_i for i in range(4)]
+                    for node in en:
+                        node.update_edge(*value)
+                
+        self.shape = self._array.shape
 
     def get_nodes_surrounding_element(self, element_id: int) -> np.ndarray:
         '''This method returns elements that are neighbours of the
@@ -180,6 +242,7 @@ class Element:
                 )
         # [pc1, pc2, pc3, pc4]
         self.H: np.ndarray = np.empty((4, 4, 4))
+        self.Hbc: np.ndarray = np.empty((4, 4, 4))
 
         # Print coordinates which are on edge for each element 
         # print(colored(f"Element {self._id}", 'red', attrs=('bold', )))
@@ -310,6 +373,12 @@ class Grid:
     def print_elements(self) -> None:
         self.ELEMENTS.print_elements()
     
+    def get_size_of_element(self):
+        w = self.WIDTH / (self.N_NODES_HORIZONTAL - 1)
+        h = self.HEIGHT / (self.N_NODES_VERTICAL - 1)
+
+        return h, w
+    
     @staticmethod
     def convert_id_to_coord(arg_id: int, height: int):
         x = (arg_id - 1) // height
@@ -369,7 +438,7 @@ class Mode(Enum):
 if __name__ == "__main__":
     
     mode = Mode.OPTION2
-    g = Grid(height=0.025, width=0.025, nodes_vertiacl=2, nodes_horizontal=2)
+    g = Grid(height=18, width=9, nodes_vertiacl=4, nodes_horizontal=4)
     # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
 
     # print("Printing all nodes ids:")
@@ -385,28 +454,70 @@ if __name__ == "__main__":
         printer.log(g, mode={'coor': 'e'})
         Jak = np.empty((2, 2))
         Jak_inv = np.empty((2, 2))
-        e1:Element4p_2D =  Element4p_2D()
+        e1:Element4p_2D =  Element4p_2D(g.get_size_of_element())
         
-        part_N_by_x = np.empty((4, 4))
-        part_N_by_y = np.empty((4, 4))
+        # part_N_by_x = np.empty((4, 4))
+        # part_N_by_y = np.empty((4, 4))
 
-        for i in range(g.N_ELEMENTS_TOTAL):
+        for element_id in range(g.N_ELEMENTS_TOTAL):
             # j liczba punktow calkowania
             for j in range(4):
-                e1.calc_derivatives_global_coordinates(i, j, g)
+                # Initialize part_N_by_x and part_N_by_y in Element4p_2D object
+                # calculate jakobian for each element
+                e1.calc_derivatives_global_coordinates(element_id, j, g)
             
+            element: Element = g.ELEMENTS.get_obj_by_id(element_id)
             for j in range(4):
+                # Calculate matrix matrix H for each element
                 integral_function = \
                     lambda: (e1.get_part_N_x()[j][:, np.newaxis] * e1.get_part_N_x()[j] +
                             e1.get_part_N_y()[j][:, np.newaxis] * e1.get_part_N_y()[j])
 
-                g.ELEMENTS.get_obj_by_id(i).H[j] = \
+                g.ELEMENTS.get_obj_by_id(element_id).H[j] = \
                     (K * integral_function() * det(e1.J))
+                
+                # FIXME: This is bad:
+                # Calculate matrix Hbc for each element
+                size = it.cycle(g.get_size_of_element()) # returns (height, width)
+                g.ELEMENTS.get_obj_by_id(element_id).Hbc[j] = \
+                    e1._Hbc[j] * (next(size) / 2 * ALPHA)
+            
+                
+            # g.ELEMENTS.get_obj_by_id(i).Hbc[0] = \
+            #     e1._H_left * g.HEIGHT/(g.N_NODES_VERTICAL - 1)/2
+            # g.ELEMENTS.get_obj_by_id(i).Hbc[1] = \
+            #     e1._H_bottom * g.WIDTH/(g.N_NODES_HORIZONTAL - 1)/2
+            # g.ELEMENTS.get_obj_by_id(i).Hbc[2] = \
+            #     e1._H_right * g.HEIGHT/(g.N_NODES_VERTICAL - 1)/2
+            # g.ELEMENTS.get_obj_by_id(i).Hbc[3] = \
+            #     e1._H_up * g.WIDTH/(g.N_NODES_HORIZONTAL - 1)/2
 
-            print(colored(f"Elements no. {i} H value:",
+            element: Element = g.get_element_by_id(element_id)
+            if isinstance(element.surr_nodes.left_nodes, np.ndarray):
+                ksi = -1, -1
+                eta = Element4p_2D._L[0][::-1]
+                N_pc1 = Element4p_2D.N[0](ksi[0], eta[0]), Element4p_2D.N[3](ksi[0], eta[0])
+                N_pc2 = Element4p_2D.N[0](ksi[1], eta[1]), Element4p_2D.N[3](ksi[1], eta[1])
+                print(f"Left edge: N1_pc1: {N_pc1}, N4_pc2: {N_pc2}")
+                
+
+            print(colored(f"Elements no. {element_id+1} H value:",
                           "red", attrs=('bold', 'underline', )))
-            print(g.ELEMENTS.get_obj_by_id(i).get_H())
+            print(g.ELEMENTS.get_obj_by_id(element_id).get_H())
 
+        # print Hbc for each element
+        dirs = ('left', 'right', 'up', 'down')
+        print()
+        for c, _Hbc in enumerate(element.Hbc):
+            print(colored(f"Element no. {c+1} {dirs[c]} Hbc matrix:", 'red'))
+            print(_Hbc)
+            print()
+        
+        print()
+
+        # print(e1._H)
+
+        # e1.show_results()
                 # print(part_N_by_x)
                 # print(part_N_by_y)
                 # print(w[j][np.newaxis])

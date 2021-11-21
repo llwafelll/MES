@@ -23,7 +23,7 @@ class GridPrinter(ABC):
 class GridLogger(ABC):
     def __init__(self) -> None:
         self.grid = None
-        self.STR_LEN = 17
+        self.STR_LEN = 19
     
     @abstractmethod
     def log(cls, grid, mode):
@@ -35,9 +35,17 @@ class GridLogger(ABC):
         for Ncol, Ecol in zip_longest(nodes, elements, fillvalue=[]):
             d: str = strlen - 2
             for node in Ncol:
+                s = ""
+                if node.is_edge():
+                    if node.edge['is_left']: s += 'l'
+                    if node.edge['is_right']: s += 'r'
+                    if node.edge['is_top']: s += 't'
+                    if node.edge['is_bottom']: s += 'b'
+
+                    print(f":({s})", end='')
                 print(colored(f"id:{node._id:0>2d}", 'cyan'), end='')
-                print(colored(f"x:{node.x:0=2.2f}", 'red'), end='')
-                print(colored(f"y:{node.y:0=2.2f}", 'green') + " | ", end='')
+                print(colored(f"x:{node.x:0=5.2f}", 'red'), end='')
+                print(colored(f"y:{node.y:0=5.2f}", 'green') + " | ", end='')
                 
             print()
             print('-' * (d+1), end='') if Ecol != array([]) or initial else None
