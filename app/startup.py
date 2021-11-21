@@ -67,7 +67,7 @@ class Node:
     
     def is_edge(self):
         return any(self.edge.values())
-
+    
 
 # TODO: NodesContainer should receive NodesContainer instead of np.ndarray
 class NodesContainer:
@@ -211,7 +211,7 @@ class NodesContainer:
             print()
             print()
     
-    def __getitem__(self, pos: tuple):
+    def __getitem__(self, pos: tuple) -> Union[np.ndarray, Node]:
         if isinstance(pos, int):
             return self._array[pos, :]
 
@@ -224,41 +224,52 @@ class Element:
     _counter: int = 1
     
     def __init__(self, arg_nodes: NodesContainer) -> None:
-        # shape = arg_nodes._array.shape
+        '''
+        ARGS:
+        arg_nodes - NodesContainer which holds all nodes in the grid
+        '''
         self._id: int = Element._counter
-        # self.surr_nodes: np.ndarray = arg_nodes.get_nodes_surrouding_element(self._id)
+
+        # Initialize surr_nodes which holds nodes surrouding element with
+        # given id. n_nodes in NodesContainer is at fixed size (2, 2)
+        _surr_nodes = arg_nodes._get_nodes_surrounding_element(self._id)
         self.surr_nodes: NodesContainer = \
-            NodesContainer(
-                n_nodes=(2, 2),
-                arg_nodes=arg_nodes._get_nodes_surrounding_element(self._id)
-                )
+            NodesContainer(n_nodes=(2, 2), arg_nodes=_surr_nodes)
+        self._surr_nodes_as_list = \
+            np.hstack([self.surr_nodes[1, :], self.surr_nodes[0, ::-1]])
+
+        # H matrix and Hbc (H on boudaries) matrix
         # [pc1, pc2, pc3, pc4]
         self.H: np.ndarray = np.empty((4, 4, 4))
         self.Hbc: np.ndarray = np.empty((4, 4, 4))
 
-        # Print coordinates which are on edge for each element 
-        # print(colored(f"Element {self._id}", 'red', attrs=('bold', )))
-        # try:
-        #     print('left', [(n.x, n.y) for n in self.surr_nodes.left_nodes])
-        # except TypeError:
-        #     print('none type, skipping')
-
-        # try:
-        #     print('right', [(n.x, n.y) for n in self.surr_nodes.right_nodes])
-        # except TypeError:
-        #     print('none type, skipping')
-
-        # try:
-        #     print('up', [(n.x, n.y) for n in self.surr_nodes.up_nodes])
-        # except TypeError:
-        #     print('none type, skipping')
-
-        # try:
-        #     print('down', [(n.x, n.y) for n in self.surr_nodes.down_nodes])
-        # except TypeError:
-        #     print('none type, skipping')
-
         Element._counter += 1
+    
+    def calc_jacobian(self, mask: Element4p_2D, pc: int) -> np.ndarray:
+        '''Calculate Jacobian for given integration point - pc. '''
+
+        # x, y = self._surr_nodes_as_list[pc].get_position()
+        x, y = zip(*(e.get_position() for e in self._surr_nodes_as_list))
+        
+        dxdksi = np.sum(mask.part_N_by_ksi[pc] * x)
+        dydeta = np.sum(mask.part_N_by_eta[pc] * y)
+        
+        dxdeta = np.sum(mask.part_N_by_eta[pc] * x)
+        dydksi = np.sum(mask.part_N_by_ksi[pc] * y)
+        
+        return np.array([[dxdksi, dydksi],
+                        [dxdeta, dydeta]])
+
+        
+    def calc_jacobians(self, mask: Element4p_2D):
+        '''Calculate Jacobian for all integration points in a element'''
+
+        J = []
+
+        for i in range(mask.Npcs):
+            J.append(self.calc_jacobian(mask, i))
+        
+        return J
     
     def get_H(self) -> np.ndarray:
         result = np.zeros((4, 4));
@@ -273,11 +284,14 @@ class ElementsContainer:
         '''
         ARGS:
         n_elements - number of elements, respectively, in y and x axis
+                   - equivalent to nodes._array.shape - 1
         nodes - all nodes of the grid
         '''
 
+        # Crucial attribute of the class, while initialized should contain elements
         self._array: np.ndarray = np.empty(n_elements, dtype=Element)
         
+        # Initialization fo the self._array
         for col in range(n_elements[1]):
             for row in reversed(range(n_elements[0])):
                 
@@ -288,15 +302,11 @@ class ElementsContainer:
         self.shape = self._array.shape
     
     def get_by_id(self, id: int) -> np.ndarray:
+        '''Return element for element with given id.'''
+
         x, y = Grid.convert_id_to_coord(id, self.shape[0])
 
         return self[y, x]
-
-    def get_obj_by_id(self, id: int) -> Element:
-        x, y = Grid.convert_id_to_coord(id, self.shape[0])
-
-        return self._array[y, x]
-
 
     def print_elements(self):
         '''This method prints out id for each node in proper format.'''
@@ -307,7 +317,7 @@ class ElementsContainer:
             
             print()
 
-    def __getitem__(self, pos: tuple) -> np.ndarray:
+    def __getitem__(self, pos: tuple) -> Union[np.ndarray, Element]:
         if isinstance(pos, int):
             return self._array[pos, :]
 
@@ -344,6 +354,7 @@ class Grid:
             ElementsContainer(self.get_n_elements(), self.NODES)
 
         
+    # Getters
     def get_size(self):
         '''Returns size of the metal element.'''
 
@@ -358,27 +369,27 @@ class Grid:
         '''Returns the number of the elements that construct the grid in a tuple.'''
 
         return (self.N_NODES_VERTICAL - 1, self.N_NODES_HORIZONTAL - 1)
+
+    def get_size_of_element(self):
+        '''Returns real size of a single element in metres.'''
+        w = self.WIDTH / (self.N_NODES_HORIZONTAL - 1)
+        h = self.HEIGHT / (self.N_NODES_VERTICAL - 1)
+
+        return h, w
     
-    def get_element_by_id(self, element_id: int) -> np.ndarray:
+    # Shortcuts 
+    def get_element_by_id(self, element_id: int) -> Element:
         return self.ELEMENTS.get_by_id(element_id)
     
-    def get_node_by_id(self, node_id: int) -> np.ndarray:
+    def get_node_by_id(self, node_id: int) -> Node:
         return self.NODES.get_by_id(node_id)
     
-    def get_nodes_surrouding_element(self, element_id: int) -> np.ndarray:
-        return self.NODES._get_nodes_surrounding_element(element_id)
-    
+    # Printing methods
     def print_nodes(self) -> None:
         self.NODES.print_nodes()
 
     def print_elements(self) -> None:
         self.ELEMENTS.print_elements()
-    
-    def get_size_of_element(self):
-        w = self.WIDTH / (self.N_NODES_HORIZONTAL - 1)
-        h = self.HEIGHT / (self.N_NODES_VERTICAL - 1)
-
-        return h, w
     
     @staticmethod
     def convert_id_to_coord(arg_id: int, height: int):
@@ -446,20 +457,41 @@ class Mode(Enum):
     OPTION1 = auto()
     OPTION2 = auto()
     OPTION3 = auto()
+    OPTION4 = auto()
 
 
 if __name__ == "__main__":
     
-    mode = Mode.OPTION2
-    g = Grid(height=18, width=9, nodes_vertiacl=4, nodes_horizontal=4)
+    # Mode selection
+    mode = Mode.OPTION4
+
+    # Grid initialization
+    g = Grid(height=.025, width=.025, nodes_vertiacl=2, nodes_horizontal=2)
     # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
 
-    # print("Printing all nodes ids:")
-    # g.NODES.print_nodes()
-    # print("\nPrinting all elements ids:")
-    # g.ELEMENTS.print_elements()
+    # ==== THE PROGRAM ====
     if mode == Mode.OPTION1:
         printer.log(g, mode={'id': 'ne', 'coor': 'en', 'nofe': '1'})
+    
+    if mode == Mode.OPTION4:
+        
+        # Print the grid
+        printer.log(g, mode={'coor': 'e'})
+
+        # Create universal element
+        e1: Element4p_2D = Element4p_2D(g.get_size_of_element())
+        
+        # Iterate over each element in the grid
+        for element_id in range(1, g.N_ELEMENTS_TOTAL + 1):
+            element: Element = g.ELEMENTS.get_by_id(element_id)
+
+            # Print out jacobian for each node of the element
+            print(colored(f"Element id: {element_id}", 'red', attrs=('bold', )))
+            for c, j in enumerate(element.calc_jacobians(e1)):
+                print(colored(f"Node {c + 1}", 'red'))
+                print(inv(j))
+                # print(inv(j))
+        
 
     # TODO: refector this to make this OO
     # Vars that will be overriden each iteration
@@ -479,20 +511,20 @@ if __name__ == "__main__":
                 # calculate jakobian for each element
                 e1.calc_derivatives_global_coordinates(element_id, j, g)
             
-            element: Element = g.ELEMENTS.get_obj_by_id(element_id)
+            element: Element = g.ELEMENTS.get_by_id(element_id)
             for j in range(4):
                 # Calculate matrix matrix H for each element
                 integral_function = \
                     lambda: (e1.get_part_N_x()[j][:, np.newaxis] * e1.get_part_N_x()[j] +
                             e1.get_part_N_y()[j][:, np.newaxis] * e1.get_part_N_y()[j])
 
-                g.ELEMENTS.get_obj_by_id(element_id).H[j] = \
+                g.ELEMENTS.get_by_id(element_id).H[j] = \
                     (K * integral_function() * det(e1.J))
                 
                 # FIXME: This is bad:
                 # Calculate matrix Hbc for each element
                 size = it.cycle(g.get_size_of_element()) # returns (height, width)
-                g.ELEMENTS.get_obj_by_id(element_id).Hbc[j] = \
+                g.ELEMENTS.get_by_id(element_id).Hbc[j] = \
                     e1._Hbc[j] * (next(size) / 2 * ALPHA)
             
                 
@@ -531,49 +563,7 @@ if __name__ == "__main__":
         # print(e1._H)
 
         # e1.show_results()
-                # print(part_N_by_x)
-                # print(part_N_by_y)
-                # print(w[j][np.newaxis])
-                # print(Jak)
-                # print((1/det(Jak) * Jak_inv)@w[j])
-        # print(part_N_by_ksi)
-        # print(part_N_by_eta)
-        # print(part_N_by_x)
-        # print(part_N_by_y)
 
-
-    # print("\nPrinting all nodes with coordinates:")
-    # g.NODES.print_all_data()
-
-    # print(f"Printing neighbour nodes for element no.: {(e := 5)}:")
-    # g.ELEMENTS.get_by_id(e).surr_nodes.print_all_data()
-
-    # Testing
-    # for i in g.NODES._array:
-    #     for j in i:
-    #         print(j._id, end=' ')
-    #     print()
-
-    # for i in g.ELEMENTS._array[0, 0].surr_nodes:
-    #     for j in i:
-    #         print(j._id, end=' ')
-    #     print()
-
-    # print()
-
-    # g.ELEMENTS._array[0, 0].surr_nodes[0, 0].x = 100
-    # g.ELEMENTS._array[0, 0].surr_nodes[0, 0].y = 101
-    # for i in g.NODES._array:
-    #     for j in i:
-    #         print(j._id, end=' ')
-    #     print()
-
-    # for i in g.ELEMENTS._array[0, 0].surr_nodes:
-    #     for j in i:
-    #         print(j._id, end=' ')
-    #     print()
-
-    # print()
 
     if mode == Mode.OPTION3:
         X = np.array([0, .025, 0, 0.025])

@@ -9,7 +9,7 @@ class Element4p_2D:
     L = _L = leggauss(2) # _L == [[x1, x2], [w1, w2]]
     L = np.hstack((L[0], L[0][::-1]))
     # [-0.57735027,  0.57735027,  0.57735027, -0.57735027]
-    N = 4
+    Npcs = 4
     J = np.empty((2, 2))
     Jinv = np.empty((2, 2))
 
