@@ -97,7 +97,7 @@ class NodesContainer:
         self.top_nodes = None
         self.bottom_nodes = None
         self.edge_nodes = None
-                
+        
         # CREATE NodeContainer for _surr_nodes
         # If arg_nodes has been provided (size is not empty) and it's
         # dimension is equal to 2 (required) then
@@ -120,7 +120,7 @@ class NodesContainer:
                         self.bottom_nodes = self._array[-1, :]
 
                     self.edge_nodes = [self.left_nodes, self.right_nodes,
-                                    self.top_nodes, self.bottom_nodes]
+                                       self.top_nodes, self.bottom_nodes]
 
         # GENERATE THE GRID:
         # Creates entirely new array of nodes (from scratch).
@@ -210,6 +210,11 @@ class NodesContainer:
                 
             print()
             print()
+
+    @staticmethod
+    def calc_dist(vector: np.ndarray):
+        return np.sqrt((vector[0].x - vector[1].x)**2 +\
+                    (vector[0].y - vector[1].y)**2)
     
     def __getitem__(self, pos: tuple) -> Union[np.ndarray, Node]:
         if isinstance(pos, int):
@@ -222,12 +227,17 @@ class NodesContainer:
 
 class Element:
     _counter: int = 1
+    mask = None # static field for elements mask
     
     def __init__(self, arg_nodes: NodesContainer) -> None:
         '''
         ARGS:
         arg_nodes - NodesContainer which holds all nodes in the grid
         '''
+
+        if not Element.mask:
+            raise Exception("Element.mask cannot be NoneType.")
+
         self._id: int = Element._counter
 
         # Initialize surr_nodes which holds nodes surrouding element with
@@ -240,43 +250,111 @@ class Element:
 
         # H matrix and Hbc (H on boudaries) matrix
         # [pc1, pc2, pc3, pc4]
-        self.H: np.ndarray = np.empty((4, 4, 4))
+        self.Hpc = np.empty((4, 4, 4))
+        self._calc_H_matrix()
+        # self.H: np.ndarray = np.empty((4, 4, 4))
+
+        self.distances = None
         self.Hbc: np.ndarray = np.empty((4, 4, 4))
+        self._calc_Hbc_matrix()
 
         Element._counter += 1
     
-    def calc_jacobian(self, mask: Element4p_2D, pc: int) -> np.ndarray:
-        '''Calculate Jacobian for given integration point - pc. '''
+    def _calc_distances(self):
+        # NodeContainer.calc_dist accept as argument np.ndarray as argument
+        # The array consists of 2 elements both of them are Node objects
+        return np.array([NodesContainer.calc_dist(self.surr_nodes[0, :]),
+                         NodesContainer.calc_dist(self.surr_nodes[:, 1]),
+                         NodesContainer.calc_dist(self.surr_nodes[1, :]),
+                         NodesContainer.calc_dist(self.surr_nodes[1, :]),
+                         ])
+
+    def _calc_gradN(self):
+        """Returns 4 element array (gradN) containing Nx2 arrays (each Nx2 array
+        is dedicated for integration point). Each Nx2 is array such that:
+        N1
+        [[[dN1/dx], [[dN2/dx], [[dN3/dx],
+          [dN1/dy]], [dN2/dy]], [dN3/dy]], ...]
+        """
+
+        jacobians = self.calc_jacobians()
+        gradN = np.empty((4, 4, 2, 1))
+
+        # pc - punk calkowania
+        for pc in range(Element.mask.Npcs):
+
+            # Create helper array of [dN/dx, dN/dy].T (T!) pairs for each N
+            # (for (single) given pc integration point)
+            vector = np.array(
+                            [np.array(e)[:, np.newaxis] for e
+                            in zip(Element.mask.get_part_N_by_ksi()[pc],
+                                   Element.mask.get_part_N_by_eta()[pc])
+                            ]
+                        )
+
+            # Get array of [dN/dx, dN/dy] pairs 
+            for i, jacobian in enumerate(jacobians):
+                # gradN[pc, i] = [80 0] * [dNi/dksi]
+                #                [0 80]  [dNi/deta]
+                gradN[pc, i] = inv(jacobian) @ vector[i]
+
+        return gradN
+    
+    def _calc_H_matrix(self):
+        """Updates H matrix in the element object. H object is NxN matrix where
+        each column is integration point and column represents each shape funcion"""
+
+        for i, (gradN, j) in enumerate(zip(self._calc_gradN(),
+                                           self.calc_jacobians())):
+            gradN = gradN.T.reshape((2, 4))
+            self.Hpc[i] = (det(j) * K * \
+                        (gradN[0][:, np.newaxis] * gradN[0] + \
+                         gradN[1][:, np.newaxis] * gradN[1])
+                        )
+
+    def _calc_Hbc_matrix(self):
+        nc: NodesContainer
+        for i, dist in enumerate(self._calc_distances()):
+            self.Hbc[i] = ALPHA * dist/2 * Element.mask._Hbc[i]
+                
+
+    
+    def calc_jacobian(self, pc: int) -> np.ndarray:
+        '''Calculate Jacobian for given integration point - pc for this element.
+        '''
 
         # x, y = self._surr_nodes_as_list[pc].get_position()
         x, y = zip(*(e.get_position() for e in self._surr_nodes_as_list))
         
-        dxdksi = np.sum(mask.part_N_by_ksi[pc] * x)
-        dydeta = np.sum(mask.part_N_by_eta[pc] * y)
+        dxdksi = np.sum(Element.mask.part_N_by_ksi[pc] * x)
+        dydeta = np.sum(Element.mask.part_N_by_eta[pc] * y)
         
-        dxdeta = np.sum(mask.part_N_by_eta[pc] * x)
-        dydksi = np.sum(mask.part_N_by_ksi[pc] * y)
+        dxdeta = np.sum(Element.mask.part_N_by_eta[pc] * x)
+        dydksi = np.sum(Element.mask.part_N_by_ksi[pc] * y)
         
         return np.array([[dxdksi, dydksi],
                         [dxdeta, dydeta]])
 
-        
-    def calc_jacobians(self, mask: Element4p_2D):
+    def calc_jacobians(self):
         '''Calculate Jacobian for all integration points in a element'''
 
         J = []
 
-        for i in range(mask.Npcs):
-            J.append(self.calc_jacobian(mask, i))
+        for i in range(Element.mask.Npcs):
+            J.append(self.calc_jacobian(i))
         
         return J
     
+    
     def get_H(self) -> np.ndarray:
-        result = np.zeros((4, 4));
-        for i in self.H:
-            result += i
-        
-        return result
+        return self.Hpc.sum(axis=0)
+    
+    def get_Hbc(self) -> np.ndarray:
+        return self.Hbc.sum(axis=0)
+    
+    @classmethod
+    def set_mask(cls, mask: Element4p_2D):
+        Element.mask = mask
 
 
 class ElementsContainer:
@@ -465,8 +543,12 @@ if __name__ == "__main__":
     # Mode selection
     mode = Mode.OPTION4
 
+    # Create universal element
+    e1: Element4p_2D = Element4p_2D()
+    Element.set_mask(e1)
+
     # Grid initialization
-    g = Grid(height=.025, width=.025, nodes_vertiacl=2, nodes_horizontal=2)
+    g = Grid(height=.025, width=.025, nodes_vertiacl=3, nodes_horizontal=3)
     # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
 
     # ==== THE PROGRAM ====
@@ -478,19 +560,24 @@ if __name__ == "__main__":
         # Print the grid
         printer.log(g, mode={'coor': 'e'})
 
-        # Create universal element
-        e1: Element4p_2D = Element4p_2D(g.get_size_of_element())
-        
         # Iterate over each element in the grid
         for element_id in range(1, g.N_ELEMENTS_TOTAL + 1):
             element: Element = g.ELEMENTS.get_by_id(element_id)
 
+            # Print H matrix for each pc for each element
+            # print(element.Hpc)
+            # print(element.get_H())
+
+            # print(element.Hbc)
+            
             # Print out jacobian for each node of the element
             print(colored(f"Element id: {element_id}", 'red', attrs=('bold', )))
-            for c, j in enumerate(element.calc_jacobians(e1)):
+            for c, j in enumerate(element.calc_jacobians()): # returns array of 4 elements each of them is jacobian
                 print(colored(f"Node {c + 1}", 'red'))
                 print(inv(j))
                 # print(inv(j))
+
+            print(element.get_Hbc())
         
 
     # TODO: refector this to make this OO

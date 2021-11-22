@@ -41,9 +41,11 @@ class Element4p_2D:
     ]
 
     def __init__(self, element_size: tuple[float] = None) -> None:
+        # row = pc, column = N1, N2, N3, N4
         self.part_N_by_eta = np.empty((4, 4))
         self.part_N_by_ksi = np.empty((4, 4))
 
+        # FIXME: This is wrong delete that after fixing
         self.part_N_by_x = np.empty((4, 4))
         self.part_N_by_y = np.empty((4, 4))
 
@@ -59,6 +61,7 @@ class Element4p_2D:
         self.edge_N = [self.left_edge_N, self.right_edge_N,
                        self.up_edge_N, self.bottom_edge_N]
         
+        # FIXME: Probably no longer neded:
         self._Hpc1 = np.zeros((4, 4))
         self._Hpc2 = np.zeros((4, 4))
         self._Hpc3 = np.zeros((4, 4))
@@ -72,6 +75,8 @@ class Element4p_2D:
         self._H_bottom = np.zeros((4, 4))
         self._Hbc = [self._H_left, self._H_right,
                      self._H_up, self._H_bottom]
+        
+        self._Hbc = np.zeros((4, 4, 4))
 
         # Initialize part_N_by_eta and part_N_by_ksi (line 44, 45)
         for row, pc in enumerate(Element4p_2D.L):
@@ -106,22 +111,22 @@ class Element4p_2D:
         for i in range(2):
             self.left_edge_N[i][0] = self.N[0](-1, pc[i])
             self.left_edge_N[i][3] = self.N[3](-1, pc[i])
-            self._H_left += \
+            self._Hbc[0] += \
                 w[i] * self.left_edge_N[i][:, np.newaxis] * self.left_edge_N[i]
 
             self.right_edge_N[i][1] = self.N[1](1, pc[i])
             self.right_edge_N[i][2] = self.N[2](1, pc[i])
-            self._H_right += \
+            self._Hbc[1] += \
                 w[i] * self.right_edge_N[i][:, np.newaxis] * self.right_edge_N[i]
 
             self.up_edge_N[i][3] = self.N[3](pc[i], 1)
             self.up_edge_N[i][2] = self.N[2](pc[i], 1)
-            self._H_up += \
+            self._Hbc[2] += \
                 w[i] * self.up_edge_N[i][:, np.newaxis] * self.up_edge_N[i]
 
             self.bottom_edge_N[i][0] = self.N[0](pc[i], -1)
             self.bottom_edge_N[i][1] = self.N[1](pc[i], -1)
-            self._H_bottom += \
+            self._Hbc[3] += \
                 w[i] * self.bottom_edge_N[i][:, np.newaxis] * self.bottom_edge_N[i]
         
         # for _H in self._Hbc:
@@ -143,6 +148,9 @@ class Element4p_2D:
         for i in range(4):
             self.part_N_by_eta[row, i] = self.d_eta_lambdas[i](pc)
             self.part_N_by_ksi[row, i] = self.d_ksi_lambdas[i](pc)
+        
+        # FIXME: This is very ugly solution
+        self.part_N_by_ksi[[0, 1, 2, 3]] = self.part_N_by_ksi[[0, 3, 2, 1]]
     
     def calc_derivatives_global_coordinates(self, i, j, grid):
         grid.jakobian(i, j, self.J, self.Jinv, self, grid)
