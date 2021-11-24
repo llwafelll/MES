@@ -48,6 +48,7 @@ class Node:
         return self._id
     
     def set_edge(self, *args, **kwargs):
+        """Overrides values in edge dict. For internal usage only"""
         if kwargs:
             for k, v in kwargs.items():
                 self.edge[k] = v
@@ -57,6 +58,7 @@ class Node:
                 self.edge[k] = v
 
     def update_edge(self, *args, **kwargs):
+        """For internal usage only"""
         if kwargs:
             for k, v in kwargs.items():
                 self.edge[k] += v
@@ -69,7 +71,6 @@ class Node:
         return any(self.edge.values())
     
 
-# TODO: NodesContainer should receive NodesContainer instead of np.ndarray
 class NodesContainer:
     def __init__(self, n_nodes: tuple, size: tuple = None,
                  arg_nodes: np.ndarray = np.array([])) -> None:
@@ -186,7 +187,8 @@ class NodesContainer:
 
         return self._array[v_from:v_to, h_from:h_to]
 
-    def get_by_id(self, id: int) -> np.ndarray:
+    def get_by_id(self, id: int) -> Node:
+        """Returns np.ndarray of Node elements."""
         x, y = Grid.convert_id_to_coord(id, self.shape[0])
 
         return self[y, x]
@@ -212,7 +214,8 @@ class NodesContainer:
             print()
 
     @staticmethod
-    def calc_dist(vector: np.ndarray):
+    def calc_dist(vector: np.ndarray) -> float:
+        '''Calculate distance between two nodes passed as np.ndarray (2, )'''
         return np.sqrt((vector[0].x - vector[1].x)**2 +\
                     (vector[0].y - vector[1].y)**2)
     
@@ -228,6 +231,7 @@ class NodesContainer:
 class Element:
     _counter: int = 1
     mask = None # static field for elements mask
+    # agregation_matrix = np.zeros((4, 4, 2)) # FIXME: Delete?
     
     def __init__(self, arg_nodes: NodesContainer) -> None:
         '''
@@ -248,24 +252,41 @@ class Element:
         self._surr_nodes_as_list = \
             np.hstack([self.surr_nodes[1, :], self.surr_nodes[0, ::-1]])
 
-        # H matrix and Hbc (H on boudaries) matrix
+        # Initialize H matrix (4x4 matrix for each integration point)
         # [pc1, pc2, pc3, pc4]
         self.Hpc = np.empty((4, 4, 4))
         self._calc_H_matrix()
         # self.H: np.ndarray = np.empty((4, 4, 4))
 
-        self.distances = None
+        # Initialize Hbc (H on boundaries) matrix (4x4 matrix
+        # for each integration point)
         self.Hbc: np.ndarray = np.empty((4, 4, 4))
         self._calc_Hbc_matrix()
 
+        # FIXME: Delete?
+        # Update local agregation matrix
+        # self._update_local_agregation_matrix()
+
         Element._counter += 1
     
+    # FIXME: Delete?
+    # def _update_local_agregation_matrix(self):
+    #     element_ids = np.array([n._id for n in self._surr_nodes_as_list])
+    #     a = np.tile(element_ids, (4, 1))
+    #     b = np.tile(element_ids[:, np.newaxis], (1, 4))
+        
+    #     matrix = np.stack((b, a), axis=2)
+    #     Element.agregation_matrix = matrix
+    
     def _calc_distances(self):
+        '''Return array of distances between nodes on located on the same edge,
+        such that [left, bottom, right, top] edge.'''
+
         # NodeContainer.calc_dist accept as argument np.ndarray as argument
         # The array consists of 2 elements both of them are Node objects
-        return np.array([NodesContainer.calc_dist(self.surr_nodes[0, :]),
+        return np.array([NodesContainer.calc_dist(self.surr_nodes[:, 0]),
                          NodesContainer.calc_dist(self.surr_nodes[:, 1]),
-                         NodesContainer.calc_dist(self.surr_nodes[1, :]),
+                         NodesContainer.calc_dist(self.surr_nodes[0, :]),
                          NodesContainer.calc_dist(self.surr_nodes[1, :]),
                          ])
 
@@ -280,9 +301,29 @@ class Element:
         jacobians = self.calc_jacobians()
         gradN = np.empty((4, 4, 2, 1))
 
+        # FIXME: This commented code is probably incorrect and not optimized
+        # but for now do not delete it, just in case.
         # pc - punk calkowania
-        for pc in range(Element.mask.Npcs):
+        # for pc in range(Element.mask.Npcs):
 
+        #     # Create helper array of [dN/dx, dN/dy].T (T!) pairs for each N
+        #     # (for (single) given pc integration point)
+        #     vector = np.array(
+        #                     [np.array(e)[:, np.newaxis] for e
+        #                     in zip(Element.mask.get_part_N_by_ksi()[pc],
+        #                            Element.mask.get_part_N_by_eta()[pc])
+        #                     ]
+        #                 )
+
+        #     # Get array of [dN/dx, dN/dy] pairs 
+        #     for i, jacobian in enumerate(jacobians):
+        #         # gradN[pc, i] = [80 0] * [dNi/dksi]
+        #         #                [0 80]  [dNi/deta]
+        #         gradN[pc, i] = inv(jacobian) @ vector[i]
+
+        # return gradN
+
+        for pc, jac in zip(range(Element.mask.Npcs), jacobians):
             # Create helper array of [dN/dx, dN/dy].T (T!) pairs for each N
             # (for (single) given pc integration point)
             vector = np.array(
@@ -291,14 +332,12 @@ class Element:
                                    Element.mask.get_part_N_by_eta()[pc])
                             ]
                         )
-
-            # Get array of [dN/dx, dN/dy] pairs 
-            for i, jacobian in enumerate(jacobians):
-                # gradN[pc, i] = [80 0] * [dNi/dksi]
-                #                [0 80]  [dNi/deta]
-                gradN[pc, i] = inv(jacobian) @ vector[i]
-
+            
+            for i, N in enumerate(vector):
+                gradN[pc, i] = inv(jac) @ vector[i]
+            
         return gradN
+                
     
     def _calc_H_matrix(self):
         """Updates H matrix in the element object. H object is NxN matrix where
@@ -324,7 +363,7 @@ class Element:
         '''
 
         # x, y = self._surr_nodes_as_list[pc].get_position()
-        x, y = zip(*(e.get_position() for e in self._surr_nodes_as_list))
+        x, y = zip(*(n.get_position() for n in self._surr_nodes_as_list))
         
         dxdksi = np.sum(Element.mask.part_N_by_ksi[pc] * x)
         dydeta = np.sum(Element.mask.part_N_by_eta[pc] * y)
@@ -351,6 +390,9 @@ class Element:
     
     def get_Hbc(self) -> np.ndarray:
         return self.Hbc.sum(axis=0)
+    
+    def get_surr_nodes_ids(self):
+        return [n._id - 1 for n in self._surr_nodes_as_list]
     
     @classmethod
     def set_mask(cls, mask: Element4p_2D):
@@ -422,6 +464,9 @@ class Grid:
             (self.N_NODES_HORIZONTAL - 1) * (self.N_NODES_VERTICAL - 1)
 
 
+        ny, nx = self.get_n_nodes()
+        self.AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
+
         # Initialization of the nodes
         self.NODES: NodesContainer = NodesContainer(self.get_n_nodes(),
                                                     size=self.get_size())
@@ -430,6 +475,30 @@ class Grid:
         # first
         self.ELEMENTS: ElementsContainer = \
             ElementsContainer(self.get_n_elements(), self.NODES)
+        
+        # Fill global agregate matrix with data
+        for element_id in range(self.N_ELEMENTS_TOTAL):
+            element = self.get_element_by_id(element_id)
+
+            # FIXME: Delete?
+            # element._update_local_agregation_matrix()
+            # for i, row in enumerate(element.agregation_matrix):
+            #     for j, col in enumerate(row):
+            #         self.AGREGATION_MATRIX[col[0]-1, col[1]-1] += \
+            #             element.get_H()[i, j]
+            
+            local_agregate = it.product(element.get_surr_nodes_ids(), repeat=2)
+            H_indices = it.product(range(4), repeat=2)
+
+            for (i, j), (ax, ay) in zip(H_indices, local_agregate):
+                self.AGREGATION_MATRIX[ax, ay] += element.get_H()[i, j]
+        
+        # Print global agregation matrix
+        for row in self.AGREGATION_MATRIX:
+            for col in row:
+                print(f"{col:3.0f}", end="  ")
+            print()
+        print() # only for breakpoint
 
         
     # Getters
@@ -548,7 +617,7 @@ if __name__ == "__main__":
     Element.set_mask(e1)
 
     # Grid initialization
-    g = Grid(height=.025, width=.025, nodes_vertiacl=3, nodes_horizontal=3)
+    g = Grid(height=.025, width=.025, nodes_vertiacl=2, nodes_horizontal=2)
     # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
 
     # ==== THE PROGRAM ====
@@ -565,8 +634,8 @@ if __name__ == "__main__":
             element: Element = g.ELEMENTS.get_by_id(element_id)
 
             # Print H matrix for each pc for each element
-            # print(element.Hpc)
-            # print(element.get_H())
+            print(element.Hpc)
+            print(element.get_H())
 
             # print(element.Hbc)
             
@@ -577,7 +646,7 @@ if __name__ == "__main__":
                 print(inv(j))
                 # print(inv(j))
 
-            print(element.get_Hbc())
+            # print(element.get_Hbc())
         
 
     # TODO: refector this to make this OO
