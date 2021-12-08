@@ -1,17 +1,33 @@
 import numpy as np
 from numpy.polynomial.legendre import leggauss
 import itertools as it
+from pcs_iterators import *
+from constants import *
 
-ALPHA = 25
 class Element4p_2D:
 
     # Static fields
-    L = _L = leggauss(2) # _L == [[x1, x2], [w1, w2]]
+    pcs, ws = L = _L = leggauss(2) # _L == [[x1, x2], [w1, w2]]
     L = np.hstack((L[0], L[0][::-1]))
-    # [-0.57735027,  0.57735027,  0.57735027, -0.57735027]
+
     Npcs = 4
     J = np.empty((2, 2))
     Jinv = np.empty((2, 2))
+
+    ksi_order = list(gen_ksi_order(2))
+    eta_order = list(gen_eta_order(2))
+
+    get_values_in_ksi_order_for = leg_iterator(ksi_order)
+    get_values_in_eta_order_for = leg_iterator(eta_order)
+    
+    pcs_ksi_order = list(get_values_in_ksi_order_for(pcs))
+    ws_ksi_order =  list(get_values_in_ksi_order_for(ws))
+    pcs_eta_order = list(get_values_in_eta_order_for(pcs))
+    ws_eta_order =  list(get_values_in_eta_order_for(ws))
+
+    pcs_orders, ws_orders = (pcs_ksi_order, pcs_eta_order), (ws_ksi_order, ws_eta_order)
+
+    
 
     # The shape function represented by lambda expression
     # this calculation should be performed only once
@@ -21,6 +37,16 @@ class Element4p_2D:
         lambda ksi, eta: 1/4 * (1 + ksi) * (1 + eta),
         lambda ksi, eta: 1/4 * (1 - ksi) * (1 + eta),
     ]
+
+    N_matrix = np.empty((4, 4))
+    for j, (ksi, eta) in enumerate(zip(*pcs_orders)):
+        for i, f in enumerate(N):
+            N_matrix[i, j] = f(ksi, eta)
+        
+    
+    pre_C_matrix = rho * C_p * N_matrix @ N_matrix.T
+    print()
+
 
     # Derivatives represented by lambda expressions
     # this calculation should be performed only once
@@ -73,10 +99,13 @@ class Element4p_2D:
         self._H_right = np.zeros((4, 4))
         self._H_up = np.zeros((4, 4))
         self._H_bottom = np.zeros((4, 4))
-        self._Hbc = [self._H_left, self._H_right,
-                     self._H_up, self._H_bottom]
+        # self._Hbc = [self._H_left, self._H_right,
+        #              self._H_up, self._H_bottom]
         
         self._Hbc = np.zeros((4, 4, 4))
+
+        # P vectors
+        self._Pvector = np.zeros((4, 4))
 
         # Initialize part_N_by_eta and part_N_by_ksi (line 44, 45)
         for row, pc in enumerate(Element4p_2D.L):
@@ -97,6 +126,7 @@ class Element4p_2D:
         # Helper variables
         pc = self._L[0][::-1]
         w = self._L[1][::-1]
+        self.w = w
         # for i in range(4):
         #     self._H[i] = self.get_part_N_x()[i][:, np.newaxis] \
         #                   * self.get_part_N_x()[i] \
@@ -113,21 +143,29 @@ class Element4p_2D:
             self.left_edge_N[i][3] = self.N[3](-1, pc[i])
             self._Hbc[0] += \
                 w[i] * self.left_edge_N[i][:, np.newaxis] * self.left_edge_N[i]
+            self._Pvector[0] += \
+                w[i] * self.left_edge_N[i] * 1200
 
             self.right_edge_N[i][1] = self.N[1](1, pc[i])
             self.right_edge_N[i][2] = self.N[2](1, pc[i])
             self._Hbc[1] += \
                 w[i] * self.right_edge_N[i][:, np.newaxis] * self.right_edge_N[i]
+            self._Pvector[1] += \
+                w[i] * self.right_edge_N[i] * 1200
 
             self.up_edge_N[i][3] = self.N[3](pc[i], 1)
             self.up_edge_N[i][2] = self.N[2](pc[i], 1)
             self._Hbc[2] += \
                 w[i] * self.up_edge_N[i][:, np.newaxis] * self.up_edge_N[i]
+            self._Pvector[2] += \
+                w[i] * self.up_edge_N[i] * 1200
 
             self.bottom_edge_N[i][0] = self.N[0](pc[i], -1)
             self.bottom_edge_N[i][1] = self.N[1](pc[i], -1)
             self._Hbc[3] += \
                 w[i] * self.bottom_edge_N[i][:, np.newaxis] * self.bottom_edge_N[i]
+            self._Pvector[3] += \
+                w[i] * self.bottom_edge_N[i] * 1200
         
         # for _H in self._Hbc:
         #     print(_H)

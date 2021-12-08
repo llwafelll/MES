@@ -11,12 +11,15 @@ from termcolor import colored
 from typing import Type, Union
 from enum import Enum, auto
 import itertools as it
+from constants import *
+from custor_print_colored import print_H1, print_H2, print_H3
 
 # TODO: Think about changing datatype of surr_nodes to NodesContainer
 # remember to keep nodes as references
 
-K = 30
-ALPHA = 25
+# K = 30
+# ALPHA = 25
+# T_o = 1200
 
 class Direction(Enum): 
     LEFT = auto()
@@ -243,6 +246,7 @@ class Element:
             raise Exception("Element.mask cannot be NoneType.")
 
         self._id: int = Element._counter
+        self.is_edge = False
 
         # Initialize surr_nodes which holds nodes surrouding element with
         # given id. n_nodes in NodesContainer is at fixed size (2, 2)
@@ -251,6 +255,8 @@ class Element:
             NodesContainer(n_nodes=(2, 2), arg_nodes=_surr_nodes)
         self._surr_nodes_as_list = \
             np.hstack([self.surr_nodes[1, :], self.surr_nodes[0, ::-1]])
+
+        self.jacobians = self.calc_jacobians()
 
         # Initialize H matrix (4x4 matrix for each integration point)
         # [pc1, pc2, pc3, pc4]
@@ -262,6 +268,12 @@ class Element:
         # for each integration point)
         self.Hbc: np.ndarray = np.empty((4, 4, 4))
         self._calc_Hbc_matrix()
+        
+        self.Pvectors = np.zeros((4, 4))
+        self._calc_P_vector()
+
+        self.C_matrices = np.zeros((4, 4, 4))
+        self._calc_C_matrix()
 
         # FIXME: Delete?
         # Update local agregation matrix
@@ -278,9 +290,23 @@ class Element:
     #     matrix = np.stack((b, a), axis=2)
     #     Element.agregation_matrix = matrix
     
+    # def equ(self):
+    #     T_1 = 0
+    #     T_0 = 1
+    #     self.get_H() * T_1 + self.get_C_matrix() * (T_1 - T_0)/(delta_T) + self.get_P_vector()
+
+    def _calc_C_matrix(self):
+        for pc, J in enumerate(self.jacobians):
+            self.C_matrices[pc] = Element4p_2D.N_matrix[pc][:, np.newaxis] * Element4p_2D.N_matrix[pc] * det(J) * C_p * rho
+        # for i, J in enumerate(self.jacobians):
+        #     self.C_matrices[i] = Element4p_2D.pre_C_matrix * det(J)
+    
+    def get_C_matrix(self):
+        return np.sum(self.C_matrices, axis=0)
+    
     def _calc_distances(self):
         '''Return array of distances between nodes on located on the same edge,
-        such that [left, bottom, right, top] edge.'''
+        such that [left, right, top, bottom] edge.'''
 
         # NodeContainer.calc_dist accept as argument np.ndarray as argument
         # The array consists of 2 elements both of them are Node objects
@@ -290,6 +316,30 @@ class Element:
                          NodesContainer.calc_dist(self.surr_nodes[1, :]),
                          ])
 
+    def _calc_P_vector(self):
+        for i, edge in enumerate(self.surr_nodes.edge_nodes):
+            if isinstance(edge, np.ndarray):
+
+                dist = NodesContainer.calc_dist(edge)
+                self.Pvectors[i] += dist / 2 * ALPHA * Element.mask._Pvector[i]
+            
+        print(colored(f"P vectors for {self._id}", 
+                      "white", "on_red", attrs=("bold", )))
+        for p in self.Pvectors:
+            for v in p:
+                print(colored(f"{v:7.3f}", "cyan"), end=" | ")
+            print()
+        print()
+        print(self.get_P_vector())
+
+                
+        # for pc, dist in enumerate(self._calc_distances()):
+        #     self.P[pc] = dist / 2 * ALPHA * Element.mask._Pvector[pc]
+    
+    def get_P_vector(self):
+        '''P vector is sum of all P vectors (each P vector is for each edge)'''
+        return np.sum(self.Pvectors, axis=0)
+        
     def _calc_gradN(self):
         """Returns 4 element array (gradN) containing Nx2 arrays (each Nx2 array
         is dedicated for integration point). Each Nx2 is array such that:
@@ -298,7 +348,6 @@ class Element:
           [dN1/dy]], [dN2/dy]], [dN3/dy]], ...]
         """
 
-        jacobians = self.calc_jacobians()
         gradN = np.empty((4, 4, 2, 1))
 
         # FIXME: This commented code is probably incorrect and not optimized
@@ -323,7 +372,7 @@ class Element:
 
         # return gradN
 
-        for pc, jac in zip(range(Element.mask.Npcs), jacobians):
+        for pc, jac in zip(range(Element.mask.Npcs), self.jacobians):
             # Create helper array of [dN/dx, dN/dy].T (T!) pairs for each N
             # (for (single) given pc integration point)
             vector = np.array(
@@ -372,7 +421,7 @@ class Element:
         dydksi = np.sum(Element.mask.part_N_by_ksi[pc] * y)
         
         return np.array([[dxdksi, dydksi],
-                        [dxdeta, dydeta]])
+                         [dxdeta, dydeta]])
 
     def calc_jacobians(self):
         '''Calculate Jacobian for all integration points in a element'''
@@ -386,9 +435,11 @@ class Element:
     
     
     def get_H(self) -> np.ndarray:
+        """Sum all Hpcx and return H matrix."""
         return self.Hpc.sum(axis=0)
     
     def get_Hbc(self) -> np.ndarray:
+        """Sum all pbcx and return H matrix."""
         return self.Hbc.sum(axis=0)
     
     def get_surr_nodes_ids(self):
@@ -418,6 +469,7 @@ class ElementsContainer:
                 # Elements constructor creates proper surr_nodes based on
                 # elements id
                 self._array[row, col] = Element(nodes)
+
         
         self.shape = self._array.shape
     
@@ -466,6 +518,8 @@ class Grid:
 
         ny, nx = self.get_n_nodes()
         self.AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
+        self.C_AGREGATION_MATRIX = self.AGREGATION_MATRIX.copy()
+        self.P_AGREGATION_MATRIX = np.zeros((ny * nx))
 
         # Initialization of the nodes
         self.NODES: NodesContainer = NodesContainer(self.get_n_nodes(),
@@ -477,7 +531,7 @@ class Grid:
             ElementsContainer(self.get_n_elements(), self.NODES)
         
         # Fill global agregate matrix with data
-        for element_id in range(self.N_ELEMENTS_TOTAL):
+        for element_id in range(1, self.N_ELEMENTS_TOTAL + 1):
             element = self.get_element_by_id(element_id)
 
             # FIXME: Delete?
@@ -487,19 +541,21 @@ class Grid:
             #         self.AGREGATION_MATRIX[col[0]-1, col[1]-1] += \
             #             element.get_H()[i, j]
             
+            # Agregation matrix
             local_agregate = it.product(element.get_surr_nodes_ids(), repeat=2)
             H_indices = it.product(range(4), repeat=2)
 
             for (i, j), (ax, ay) in zip(H_indices, local_agregate):
                 self.AGREGATION_MATRIX[ax, ay] += element.get_H()[i, j]
-        
-        # Print global agregation matrix
-        for row in self.AGREGATION_MATRIX:
-            for col in row:
-                print(f"{col:3.0f}", end="  ")
-            print()
-        print() # only for breakpoint
-
+            
+            local_agregate = it.product(element.get_surr_nodes_ids(), repeat=2)
+            C_indices = it.product(range(4), repeat=2)
+            for (i, j), (ax, ay) in zip(C_indices, local_agregate):
+                self.C_AGREGATION_MATRIX[ax, ay] += element.get_C_matrix()[i, j]
+            
+            # P agregation vector
+            for i, a in enumerate(element.get_surr_nodes_ids()):
+                self.P_AGREGATION_MATRIX[a] += element.get_P_vector()[i]
         
     # Getters
     def get_size(self):
@@ -537,6 +593,17 @@ class Grid:
 
     def print_elements(self) -> None:
         self.ELEMENTS.print_elements()
+    
+    def print_agregation_matrix(self, matrix) -> None:
+        """Print agregation matrix"""
+
+        prec = 2
+        n = len(str(int(matrix.max()))) + prec + 1 # add one because of "."
+        for row in matrix:
+            for col in row:
+                print(f"{col:0{n}.{prec}f}", end="  ")
+            print()
+        
     
     @staticmethod
     def convert_id_to_coord(arg_id: int, height: int):
@@ -617,7 +684,7 @@ if __name__ == "__main__":
     Element.set_mask(e1)
 
     # Grid initialization
-    g = Grid(height=.025, width=.025, nodes_vertiacl=2, nodes_horizontal=2)
+    g = Grid(height=H, width=B, nodes_vertiacl=N_H, nodes_horizontal=N_B)
     # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
 
     # ==== THE PROGRAM ====
@@ -626,23 +693,38 @@ if __name__ == "__main__":
     
     if mode == Mode.OPTION4:
         
-        # Print the grid
+        print(); print_H1("Grid:")
         printer.log(g, mode={'coor': 'e'})
+
+        print_H1("Grid H agregation matrix:")
+        g.print_agregation_matrix(g.AGREGATION_MATRIX)
+
+        print_H1("Grid C agregation matrix:")
+        g.print_agregation_matrix(g.C_AGREGATION_MATRIX)
+
+        print_H1("Grid P vector agregation matrix")
+        print(g.P_AGREGATION_MATRIX)
+        assert False
 
         # Iterate over each element in the grid
         for element_id in range(1, g.N_ELEMENTS_TOTAL + 1):
             element: Element = g.ELEMENTS.get_by_id(element_id)
 
-            # Print H matrix for each pc for each element
+            print(colored(f"Element id: {element_id}", 'red', attrs=('bold', )))
+
+            print(f"Hpc matrix for element:")
             print(element.Hpc)
+
+            print(f"H matrix for element")
             print(element.get_H())
 
-            # print(element.Hbc)
+            print(f"Hbc matrix for element")
+            print(element.Hbc)
             
             # Print out jacobian for each node of the element
-            print(colored(f"Element id: {element_id}", 'red', attrs=('bold', )))
+            print(f"Jacobians")
             for c, j in enumerate(element.calc_jacobians()): # returns array of 4 elements each of them is jacobian
-                print(colored(f"Node {c + 1}", 'red'))
+                print(colored(f"pc no. {c + 1}", 'red'))
                 print(inv(j))
                 # print(inv(j))
 
