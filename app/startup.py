@@ -704,6 +704,7 @@ if __name__ == "__main__":
 
         print_H1("Grid P vector agregation matrix")
         print(g.P_AGREGATION_MATRIX)
+
         assert False
 
         # Iterate over each element in the grid

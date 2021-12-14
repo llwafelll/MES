@@ -25,13 +25,12 @@ class Element4p_2D:
     pcs_eta_order = list(get_values_in_eta_order_for(pcs))
     ws_eta_order =  list(get_values_in_eta_order_for(ws))
 
-    pcs_orders, ws_orders = (pcs_ksi_order, pcs_eta_order), (ws_ksi_order, ws_eta_order)
-
+    pcs_orders = pcs_ksi_order, pcs_eta_order
+    ws_orders = ws_ksi_order, ws_eta_order
     
-
     # The shape function represented by lambda expression
     # this calculation should be performed only once
-    N = [
+    N_functions = [
         lambda ksi, eta: 1/4 * (1 - ksi) * (1 - eta),
         lambda ksi, eta: 1/4 * (1 + ksi) * (1 - eta),
         lambda ksi, eta: 1/4 * (1 + ksi) * (1 + eta),
@@ -40,7 +39,7 @@ class Element4p_2D:
 
     N_matrix = np.empty((4, 4))
     for j, (ksi, eta) in enumerate(zip(*pcs_orders)):
-        for i, f in enumerate(N):
+        for i, f in enumerate(N_functions):
             N_matrix[i, j] = f(ksi, eta)
         
     
@@ -57,6 +56,14 @@ class Element4p_2D:
         lambda ksi: 1/4 * (1 - ksi),
     ]
 
+    dNdeta = np.empty((4, 4))
+    print("dNdeta")
+    for row, pc in enumerate(pcs_ksi_order):
+        for col, dNdeta_func in enumerate(d_eta_lambdas):
+            print(pc, end=" | ")
+            dNdeta[row, col] = dNdeta_func(pc)
+        print()
+
     # Derivatives represented by lambda expressions
     # this calculation should be performed only once
     d_ksi_lambdas = [
@@ -65,6 +72,11 @@ class Element4p_2D:
         lambda eta: 1/4 * (1 + eta),
         lambda eta: - 1/4 * (1 + eta),
     ]
+
+    dNdksi = np.empty((4, 4))
+    for row, pc in enumerate(pcs_eta_order):
+        for col, dNdksi_func in enumerate(d_ksi_lambdas):
+            dNdksi[row, col] = dNdksi_func(pc)
 
     def __init__(self, element_size: tuple[float] = None) -> None:
         # row = pc, column = N1, N2, N3, N4
@@ -88,11 +100,11 @@ class Element4p_2D:
                        self.up_edge_N, self.bottom_edge_N]
         
         # FIXME: Probably no longer neded:
-        self._Hpc1 = np.zeros((4, 4))
-        self._Hpc2 = np.zeros((4, 4))
-        self._Hpc3 = np.zeros((4, 4))
-        self._Hpc4 = np.zeros((4, 4))
-        self._H = [self._Hpc1, self._Hpc2, self._Hpc3, self._Hpc4]
+        # self._Hpc1 = np.zeros((4, 4))
+        # self._Hpc2 = np.zeros((4, 4))
+        # self._Hpc3 = np.zeros((4, 4))
+        # self._Hpc4 = np.zeros((4, 4))
+        # self._H = [self._Hpc1, self._Hpc2, self._Hpc3, self._Hpc4]
 
         # H value calculated for each edge.
         self._H_left = np.zeros((4, 4))
@@ -139,29 +151,29 @@ class Element4p_2D:
         # on a boundary
         # TODO: consider moving this part to helper method
         for i in range(2):
-            self.left_edge_N[i][0] = self.N[0](-1, pc[i])
-            self.left_edge_N[i][3] = self.N[3](-1, pc[i])
+            self.left_edge_N[i][0] = self.N_functions[0](-1, pc[i])
+            self.left_edge_N[i][3] = self.N_functions[3](-1, pc[i])
             self._Hbc[0] += \
                 w[i] * self.left_edge_N[i][:, np.newaxis] * self.left_edge_N[i]
             self._Pvector[0] += \
                 w[i] * self.left_edge_N[i] * 1200
 
-            self.right_edge_N[i][1] = self.N[1](1, pc[i])
-            self.right_edge_N[i][2] = self.N[2](1, pc[i])
+            self.right_edge_N[i][1] = self.N_functions[1](1, pc[i])
+            self.right_edge_N[i][2] = self.N_functions[2](1, pc[i])
             self._Hbc[1] += \
                 w[i] * self.right_edge_N[i][:, np.newaxis] * self.right_edge_N[i]
             self._Pvector[1] += \
                 w[i] * self.right_edge_N[i] * 1200
 
-            self.up_edge_N[i][3] = self.N[3](pc[i], 1)
-            self.up_edge_N[i][2] = self.N[2](pc[i], 1)
+            self.up_edge_N[i][3] = self.N_functions[3](pc[i], 1)
+            self.up_edge_N[i][2] = self.N_functions[2](pc[i], 1)
             self._Hbc[2] += \
                 w[i] * self.up_edge_N[i][:, np.newaxis] * self.up_edge_N[i]
             self._Pvector[2] += \
                 w[i] * self.up_edge_N[i] * 1200
 
-            self.bottom_edge_N[i][0] = self.N[0](pc[i], -1)
-            self.bottom_edge_N[i][1] = self.N[1](pc[i], -1)
+            self.bottom_edge_N[i][0] = self.N_functions[0](pc[i], -1)
+            self.bottom_edge_N[i][1] = self.N_functions[1](pc[i], -1)
             self._Hbc[3] += \
                 w[i] * self.bottom_edge_N[i][:, np.newaxis] * self.bottom_edge_N[i]
             self._Pvector[3] += \
