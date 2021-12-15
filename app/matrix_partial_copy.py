@@ -80,8 +80,8 @@ class Element4p_2D:
 
     def __init__(self, element_size: tuple[float] = None) -> None:
         # row = pc, column = N1, N2, N3, N4
-        self.part_N_by_eta = np.empty((4, 4))
-        self.part_N_by_ksi = np.empty((4, 4))
+        # self.part_N_by_eta = np.empty((4, 4))
+        # self.part_N_by_ksi = np.empty((4, 4))
 
         # FIXME: This is wrong delete that after fixing
         self.part_N_by_x = np.empty((4, 4))
@@ -120,8 +120,8 @@ class Element4p_2D:
         self._Pvector = np.zeros((4, 4))
 
         # Initialize part_N_by_eta and part_N_by_ksi (line 44, 45)
-        for row, pc in enumerate(Element4p_2D.L):
-            self._calc_derivatives_local_coordinates(row, pc)
+        # for row, pc in enumerate(Element4p_2D.L):
+        #     self._calc_derivatives_local_coordinates(row, pc)
 
         # FIXME: This for loop and L assignment can be completely removed
         # and nothing changes?
@@ -183,24 +183,13 @@ class Element4p_2D:
         #     print(_H)
         #     print()
 
-    def show_results(self):
-        print("part_N_by_eta:")
-        print(self.part_N_by_eta)
-        print("\npart_N_by_ksi:")
-        print(self.part_N_by_ksi)
-        print("\npart_N_by_x:")
-        print(self.part_N_by_x)
-        print("\npart_N_by_y:")
-        print(self.part_N_by_y)
-        print()
-
-    def _calc_derivatives_local_coordinates(self, row, pc):
-        for i in range(4):
-            self.part_N_by_eta[row, i] = self.d_eta_lambdas[i](pc)
-            self.part_N_by_ksi[row, i] = self.d_ksi_lambdas[i](pc)
+    # def _calc_derivatives_local_coordinates(self, row, pc):
+    #     for i in range(4):
+    #         self.part_N_by_eta[row, i] = self.d_eta_lambdas[i](pc)
+    #         self.part_N_by_ksi[row, i] = self.d_ksi_lambdas[i](pc)
         
-        # FIXME: This is very ugly solution
-        self.part_N_by_ksi[[0, 1, 2, 3]] = self.part_N_by_ksi[[0, 3, 2, 1]]
+    #     # FIXME: This is very ugly solution
+    #     self.part_N_by_ksi[[0, 1, 2, 3]] = self.part_N_by_ksi[[0, 3, 2, 1]]
     
     def calc_derivatives_global_coordinates(self, i, j, grid):
         grid.jakobian(i, j, self.J, self.Jinv, self, grid)
@@ -208,11 +197,11 @@ class Element4p_2D:
         for k in range(4):
             self.part_N_by_x[j, k], self.part_N_by_y[j, k] = self.Jinv@w[k]
     
-    def get_part_N_by_eta(self) -> np.ndarray:
-        return self.part_N_by_eta
+    # def get_part_N_by_eta(self) -> np.ndarray:
+    #     return self.part_N_by_eta
     
-    def get_part_N_by_ksi(self) -> np.ndarray:
-        return self.part_N_by_ksi
+    # def get_part_N_by_ksi(self) -> np.ndarray:
+    #     return self.part_N_by_ksi
 
     def get_part_N_x(self) -> np.ndarray:
         return self.part_N_by_x

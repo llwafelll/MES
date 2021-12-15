@@ -7,7 +7,7 @@ C_p = 700 # specific heat
 rho = 7800 # density
 K = 25 # conductivity W/mK
 
-H = .1
-B = .1
-N_H = 4
-N_B = 4
+H = .025
+B = .025
+N_H = 2
+N_B = 2

@@ -350,55 +350,67 @@ class Element:
 
         gradN = np.empty((4, 4, 2, 1))
 
-        # FIXME: This commented code is probably incorrect and not optimized
-        # but for now do not delete it, just in case.
-        # pc - punk calkowania
-        # for pc in range(Element.mask.Npcs):
+        for pc, jac in zip(range(Element4p_2D.Npcs), self.jacobians):
 
-        #     # Create helper array of [dN/dx, dN/dy].T (T!) pairs for each N
-        #     # (for (single) given pc integration point)
-        #     vector = np.array(
-        #                     [np.array(e)[:, np.newaxis] for e
-        #                     in zip(Element.mask.get_part_N_by_ksi()[pc],
-        #                            Element.mask.get_part_N_by_eta()[pc])
-        #                     ]
-        #                 )
+            # [[dNi/deta],  this is loc_gradN
+            #  [dNi/dksi]]
+            loc_gradN = np.stack(
+                                 (Element4p_2D.dNdksi[pc],
+                                  Element4p_2D.dNdeta[pc]), axis=1
+                                 )[:, :, np.newaxis]
 
-        #     # Get array of [dN/dx, dN/dy] pairs 
-        #     for i, jacobian in enumerate(jacobians):
-        #         # gradN[pc, i] = [80 0] * [dNi/dksi]
-        #         #                [0 80]  [dNi/deta]
-        #         gradN[pc, i] = inv(jacobian) @ vector[i]
+            gradN[pc] = inv(jac) @ loc_gradN
 
-        # return gradN
+        return gradN
 
-        for pc, jac in zip(range(Element.mask.Npcs), self.jacobians):
+
+        # for pc, jac in zip(range(Element.mask.Npcs), self.jacobians):
             # Create helper array of [dN/dx, dN/dy].T (T!) pairs for each N
             # (for (single) given pc integration point)
-            vector = np.array(
-                            [np.array(e)[:, np.newaxis] for e
-                            in zip(Element.mask.get_part_N_by_ksi()[pc],
-                                   Element.mask.get_part_N_by_eta()[pc])
-                            ]
-                        )
+            # vector = np.array(
+            #                 [np.array(e)[:, np.newaxis] for e
+            #                 in zip(Element.mask.get_part_N_by_ksi()[pc],
+            #                        Element.mask.get_part_N_by_eta()[pc])
+            #                 ]
+            #             )
+
+        #     vector = np.array(
+        #                     [np.array(e)[:, np.newaxis] for e
+        #                     in zip(Element4p_2D.dNdksi[pc],
+        #                            Element4p_2D.dNdeta[pc])
+        #                     ]
+        #                 )
             
-            for i, N in enumerate(vector):
-                gradN[pc, i] = inv(jac) @ vector[i]
+        #     for i, N in enumerate(vector):
+        #         gradN[pc, i] = inv(jac) @ vector[i]
             
-        return gradN
+        # return gradN
                 
     
     def _calc_H_matrix(self):
         """Updates H matrix in the element object. H object is NxN matrix where
         each column is integration point and column represents each shape funcion"""
 
-        for i, (gradN, j) in enumerate(zip(self._calc_gradN(),
-                                           self.calc_jacobians())):
-            gradN = gradN.T.reshape((2, 4))
-            self.Hpc[i] = (det(j) * K * \
-                        (gradN[0][:, np.newaxis] * gradN[0] + \
-                         gradN[1][:, np.newaxis] * gradN[1])
-                        )
+        mat = np.transpose(np.squeeze(self._calc_gradN(), axis=3), (2, 0, 1))
+        # np.transpose(np.squeeze(self._calc_gradN(), axis=3), (0, 2, 1))
+
+        mat = np.stack((mat[0], mat[1]), axis=1)
+        
+        # for i, 
+        mat = \
+            mat[:, 0][:, :, np.newaxis] * mat[:, 0][:, np.newaxis] + \
+            mat[:, 1][:, :, np.newaxis] * mat[:, 1][:, np.newaxis]
+
+        self.Hpc = 30 * mat * det(self.jacobians)
+        print()
+
+        # for i, (gradN, j) in enumerate(zip(self._calc_gradN(),
+        #                                    self.calc_jacobians())):
+        #     gradN = gradN.T.reshape((2, 4))
+        #     self.Hpc[i] = (det(j) * K * \
+        #                 (gradN[0][:, np.newaxis] * gradN[0] + \
+        #                  gradN[1][:, np.newaxis] * gradN[1])
+        #                 )
 
     def _calc_Hbc_matrix(self):
         nc: NodesContainer
@@ -414,11 +426,18 @@ class Element:
         # x, y = self._surr_nodes_as_list[pc].get_position()
         x, y = zip(*(n.get_position() for n in self._surr_nodes_as_list))
         
-        dxdksi = np.sum(Element.mask.part_N_by_ksi[pc] * x)
-        dydeta = np.sum(Element.mask.part_N_by_eta[pc] * y)
+        # dxdksi = np.sum(Element.mask.part_N_by_ksi[pc] * x)
+        # dydeta = np.sum(Element.mask.part_N_by_eta[pc] * y)
+
+        # Ze wzoru na interpolacje
+        # dx/dKsi = dN1/dKsi * x1 + dN2/dKsi * x2 + ...
+        dxdksi = np.sum(Element4p_2D.dNdksi[pc] * x)
+        dydeta = np.sum(Element4p_2D.dNdeta[pc] * y)
         
-        dxdeta = np.sum(Element.mask.part_N_by_eta[pc] * x)
-        dydksi = np.sum(Element.mask.part_N_by_ksi[pc] * y)
+        # dxdeta = np.sum(Element.mask.part_N_by_eta[pc] * x)
+        # dydksi = np.sum(Element.mask.part_N_by_ksi[pc] * y)
+        dxdeta = np.sum(Element4p_2D.dNdeta[pc] * x)
+        dydksi = np.sum(Element4p_2D.dNdksi[pc] * y)
         
         return np.array([[dxdksi, dydksi],
                          [dxdeta, dydeta]])
@@ -428,7 +447,7 @@ class Element:
 
         J = []
 
-        for i in range(Element.mask.Npcs):
+        for i in range(Element4p_2D.Npcs):
             J.append(self.calc_jacobian(i))
         
         return J
@@ -629,8 +648,10 @@ class Grid:
     def jakobian(element_id: Union[int, Element], row, J, Jinv,
                  e: Element4p_2D, grid: Union[Grid, None] = None):
 
-        part_N_by_eta = e.get_part_N_by_eta()
-        part_N_by_ksi = e.get_part_N_by_ksi()
+        # part_N_by_eta = e.get_part_N_by_eta()
+        # part_N_by_ksi = e.get_part_N_by_ksi()
+        part_N_by_eta = Element4p_2D.dNdksi
+        part_N_by_ksi = Element4p_2D.dNdeta
 
         NOD: np.ndarray
         if isinstance(element_id, int) and grid:
