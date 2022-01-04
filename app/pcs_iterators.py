@@ -24,3 +24,6 @@ def leg_iterator(order):
             yield values[i]
     
     return inner_gen
+
+if __name__ == "__main__":
+    print()
