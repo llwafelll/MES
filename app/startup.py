@@ -757,6 +757,8 @@ class Mode(Enum):
     OPTION3 = auto()
     OPTION4 = auto()
 
+global aglobal
+aglobal = 10
 
 if __name__ == "__main__":
     

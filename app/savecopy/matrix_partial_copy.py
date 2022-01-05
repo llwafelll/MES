@@ -43,7 +43,7 @@ class Element4p_2D:
             N_matrix[i, j] = f(ksi, eta)
         
     
-    pre_C_matrix = rho * C_p * N_matrix @ N_matrix.T
+    # pre_C_matrix = rho * C_p * N_matrix @ N_matrix.T
     print()
 
 
