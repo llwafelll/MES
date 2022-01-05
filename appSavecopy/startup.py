@@ -281,10 +281,10 @@ class Element:
         Element._counter += 1
     
     def calculate(self):
-        self.Hpc = np.zeros((Element4p_2D.Npcs, 4, 4))
-        self.C_matrices = np.zeros((Element4p_2D.Npcs, 4, 4))
-        self.Hbc = np.zeros((4, 4, 4)) # <- for each surface (pre-summed each integration point)
-        self.Pvectors = np.zeros((4, 4)) # <- for each surface (pre-summed each integration point)
+        self.Hpc = np.zeros((4, 4, 4))
+        self.C_matrices = np.zeros((4, 4, 4))
+        self.Hbc = np.zeros((4, 4, 4))
+        self.Pvectors = np.zeros((4, 4))
 
         self._calc_H_matrix()
         self._calc_C_matrices()
@@ -292,7 +292,6 @@ class Element:
         # Boudary condition
         self._calc_Hbc_matrix()
         self._calc_P_vector()
-        pass
     
     # FIXME: Delete?
     # def _update_local_agregation_matrix(self):
@@ -334,13 +333,7 @@ class Element:
             mat[:, 0][:, :, np.newaxis] * mat[:, 0][:, np.newaxis] + \
             mat[:, 1][:, :, np.newaxis] * mat[:, 1][:, np.newaxis]
 
-        ws_ksi_order = np.array(Element4p_2D.ws_ksi_order)
-        ws_eta_order = np.array(Element4p_2D.ws_eta_order)
-        # self.Hpc = K * mat * det(self.jacobians)
-        self.Hpc = K * mat * det(self.jacobians)[:, np.newaxis, np.newaxis] * \
-                   ws_ksi_order[:, np.newaxis, np.newaxis] * \
-                   ws_eta_order[:, np.newaxis, np.newaxis]
-        print()
+        self.Hpc = K * mat * det(self.jacobians)
 
         # for i, (gradN, j) in enumerate(zip(self._calc_gradN(),
         #                                    self.calc_jacobians())):
@@ -359,11 +352,9 @@ class Element:
             # self.C_matrices[pc] = Element4p_2D.N_matrix[pc][:, np.newaxis] * Element4p_2D.N_matrix[pc] * det(J) * C_p * rho
             # self.C_matrices[pc] = Element4p_2D._C_matrix[pc] * det(J)
             self.C_matrices[pc] = Element4p_2D.N_matrix[pc, :, np.newaxis] * \
-                                  Element4p_2D.N_matrix[pc, :] * C_p * rho * det(J) * \
-                                  Element4p_2D.ws_ksi_order[pc] * Element4p_2D.ws_eta_order[pc]
+                                  Element4p_2D.N_matrix[pc, :] * C_p * rho * det(J)
         # for i, J in enumerate(self.jacobians):
         #     self.C_matrices[i] = Element4p_2D.pre_C_matrix * det(J)
-        pass
     
     def get_C_matrix(self):
         return np.sum(self.C_matrices, axis=0)
@@ -379,7 +370,7 @@ class Element:
                     self.Hbc[i] += wage * row[:, np.newaxis] * row
 
                 self.Hbc[i] = self.Hbc[i] * ALPHA * distances[i]/2
-        
+
         # print()
         # for i, (Nsurf, dist) in enumerate(zip(Element4p_2D.N_surf, self._calc_distances())):
         #     for row, wage in zip(Nsurf, Element4p_2D.ws):
@@ -465,7 +456,7 @@ class Element:
           [dN1/dy]], [dN2/dy]], [dN3/dy]], ...]
         """
 
-        gradN = np.empty((Element4p_2D.Npcs, 4, 2, 1))
+        gradN = np.empty((4, 4, 2, 1))
 
         for pc, jac in zip(range(Element4p_2D.Npcs), self.jacobians):
 
