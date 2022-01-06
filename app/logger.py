@@ -2,7 +2,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from itertools import cycle, zip_longest
 from numpy import array, newaxis
+import numpy as np
 from termcolor import colored
+from matplotlib import pyplot as plt
 
 class GridPrinter(ABC):
     def __init__(self) -> None:
@@ -18,19 +20,20 @@ class GridPrinter(ABC):
         coor: e - print edges and coordinates
         nofe: 'n' - print nodes surrounding edge which id is provided'''
         self.current_logger.log(log, mode)
-        
+    
 
 class GridLogger(ABC):
     def __init__(self) -> None:
         self.grid = None
-        self.STR_LEN = 19
+        self.STR_LEN = 29
     
     @abstractmethod
     def log(cls, grid, mode):
         pass
 
     @classmethod
-    def _print_elements(cls, nodes, elements, strlen):
+    def _print_elements(cls, nodes, elements, strlen, precision=2):
+        p = precision
         initial = True
         for Ncol, Ecol in zip_longest(nodes, elements, fillvalue=[]):
             d: str = strlen - 2
@@ -42,10 +45,10 @@ class GridLogger(ABC):
                     if node.edge['is_top']: s += 't'
                     if node.edge['is_bottom']: s += 'b'
 
-                    print(f":({s})", end='')
+                print(colored(f"({s:2})", 'grey'), end='')
                 print(colored(f"id:{node._id:0>2d}", 'cyan'), end='')
-                print(colored(f"x:{node.x:0=5.2f}", 'red'), end='')
-                print(colored(f"y:{node.y:0=5.2f}", 'green') + " | ", end='')
+                print(colored(f"x:{node.x:0={p+3}.{p}f}", 'red'), end='')
+                print(colored(f"y:{node.y:0={p+3}.{p}f}", 'green') + " | ", end='')
                 
             print()
             print('-' * (d+1), end='') if Ecol != array([]) or initial else None
@@ -99,6 +102,31 @@ class GridJsonLogger(GridLogger):
     def log(cls, grid):
         pass
 
+class GridGrapher():
+    def __init__(self, figsize=(4, 4)):
+        self.figsize = figsize
+    
+    def graph(self, grid):
+        fig, ax = plt.subplots(figsize=self.figsize)       
+        nodes = grid.NODES.get_np_array()
+        x, y = nodes.transpose((2, 1, 0))
+
+        ax.scatter(x.ravel(), y.ravel())
+
+        plt.show()
+        
 
 printer = GridPrinter()
 printer.set_logger(GridConsoleLogger())
+
+grapher = GridGrapher(figsize=(4, 4))
+
+if __name__ == '__main__':
+    fig, ax = plt.subplots()
+    X = np.linspace(0, 4, 50)
+    f = lambda x: np.sqrt(x)
+    Y = f(X)
+    
+    ax.plot(X, Y)
+    plt.show()
+    

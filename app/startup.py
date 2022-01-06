@@ -12,6 +12,12 @@ import numpy as np
 from numpy.linalg import det, inv
 from termcolor import colored
 
+from txt_importer import dl
+# dl.change_file("Test1_4_4.txt")
+# dl.change_file("Test2_4_4_MixGrid.txt")
+# dl.change_file("Test3_31_31_kwadrat.txt")
+dl.change_file("Test4_31_31_trapez.txt")
+dl.load_data()
 from constants import *
 from custor_print_colored import print_H1, print_H2, print_H3
 from logger import *
@@ -68,11 +74,11 @@ class Node:
         """For internal usage only"""
         if kwargs:
             for k, v in kwargs.items():
-                self.edge[k] += v
+                self.edge[k] |= v
             
         elif args:
             for k, v in zip(self.edge.keys(), args):
-                self.edge[k] += v
+                self.edge[k] |= v
     
     def is_edge(self):
         return any(self.edge.values())
@@ -80,7 +86,8 @@ class Node:
 
 class NodesContainer:
     def __init__(self, n_nodes: tuple, size: tuple = None,
-                 arg_nodes: np.ndarray = np.array([])) -> None:
+                 arg_surr_nodes: np.ndarray = np.array([]),
+                 arg_nodes_arr: np.ndarray = np.array([])) -> None:
         '''
         ARGS:
         n_nodes - number of nodes, respectively, in y and x axis
@@ -111,12 +118,12 @@ class NodesContainer:
         # dimension is equal to 2 (required) then
         # create NodesContainer whose _array keep references certain nodes.
         # Probably runs while creating _surr_nodes
-        if arg_nodes.size and arg_nodes.ndim == 2:
+        if arg_surr_nodes.size and arg_surr_nodes.ndim == 2:
 
             # Initialize _array using provided array "arg_nodes"
             for row in range(n_nodes[0]):
                 for col in range(n_nodes[1]):
-                    self._array[row, col] = arg_nodes[row, col]
+                    self._array[row, col] = arg_surr_nodes[row, col]
 
                     if self._array[row, col].edge["is_left"]:
                         self.left_nodes = self._array[:, 0]
@@ -169,6 +176,42 @@ class NodesContainer:
                     value = [i == en_i for i in range(4)]
                     for node in en:
                         node.update_edge(*value)
+
+        # Generate grid from file
+        elif arg_nodes_arr.size:
+            # Declaer matrix to store Node class instances and pass
+            # them to NodesContainer
+            n = arg_nodes_arr.shape[0]
+            nodes = np.empty((n, n), dtype=Node)
+
+            # Initialize matrix by creating Node cls instances and assigning them
+            for i, row in enumerate(arg_nodes_arr):
+                for j, col in enumerate(row):
+                    nodes[len(row) - j-1, i] = Node(col[0], col[1])
+
+            edge_noes = [
+                nodes[:, 0], nodes[:, -1], # left, right
+                nodes[0, :], nodes[-1, :], # bottom, top
+            ]
+            keys = ("is_left", "is_right", "is_top", "is_bottom") # you can use node object to get the data
+
+            for es, k in zip(edge_noes, keys):
+                for e in es:
+                    e.update_edge(**{k: True})
+
+            # # Update information about node's edges
+            # for _node in nodes[0, :]:
+            #     _node.update_edge(False, False, True, False)
+            # for _node in nodes[-1, :]:
+            #     _node.update_edge(False, False, False, True)
+            # for _node in nodes[:, 0]:
+            #     _node.update_edge(True, False, False, False)
+            # for _node in nodes[:, -1]:
+            #     _node.update_edge(False, True, False, False)
+            
+            self._array = nodes
+
+
                 
         self.shape = self._array.shape
 
@@ -208,17 +251,27 @@ class NodesContainer:
                 print(j._id, end=' ')
             print()
     
-    def print_all_data(self):
+    def print_all_data(self, a=3):
         '''Prints out id, x and y coordinates in proper format.'''
 
         for i in self._array:
             for j in i:
-                print(f"id:{j._id:0>2d}", end='')
-                print(f"x:{j.x:0=2.2f}", end='')
-                print(f"y:{j.y:0=2.2f} | ", end='')
+                print(f"id:{j._id:0>{a}d}", end='')
+                print(f"x:{j.x:0=2.{a}f}", end='')
+                print(f"y:{j.y:0=2.{a}f} | ", end='')
                 
             print()
             print()
+    
+    def get_np_array(self):
+        arr = np.zeros((*self._array.shape, 2))
+
+        for i, row in enumerate(self._array):
+            for j, col in enumerate(row):
+                arr[i, j] = [col.x, col.y]
+        
+        return arr
+                
 
     @staticmethod
     def calc_dist(vector: np.ndarray) -> float:
@@ -256,7 +309,7 @@ class Element:
         # given id. n_nodes in NodesContainer is at fixed size (2, 2)
         _surr_nodes = arg_nodes._get_nodes_surrounding_element(self._id)
         self.surr_nodes: NodesContainer = \
-            NodesContainer(n_nodes=(2, 2), arg_nodes=_surr_nodes)
+            NodesContainer(n_nodes=(2, 2), arg_surr_nodes=_surr_nodes)
         self._surr_nodes_as_list = \
             np.hstack([self.surr_nodes[1, :], self.surr_nodes[0, ::-1]])
 
@@ -290,6 +343,7 @@ class Element:
         self._calc_C_matrices()
 
         # Boudary condition
+        
         self._calc_Hbc_matrix()
         self._calc_P_vector()
         pass
@@ -340,7 +394,6 @@ class Element:
         self.Hpc = K * mat * det(self.jacobians)[:, np.newaxis, np.newaxis] * \
                    ws_ksi_order[:, np.newaxis, np.newaxis] * \
                    ws_eta_order[:, np.newaxis, np.newaxis]
-        print()
 
         # for i, (gradN, j) in enumerate(zip(self._calc_gradN(),
         #                                    self.calc_jacobians())):
@@ -574,40 +627,64 @@ class ElementsContainer:
 
 class Grid:
     def __init__(self,
-                 height: float, width: float,
-                 nodes_vertiacl: int, nodes_horizontal: int) -> None:
+                 height: float = None, width: float = None,
+                 nodes_vertiacl: int = None, nodes_horizontal: int = None,
+                 data: dict = None) -> None:
 
-        # height and width for whole square
-        self.HEIGHT: float = height
-        self.WIDTH: float = width
+        if data:
+            nodes: np.ndarray = data["Nodes"]
 
-        # number of nodes vertically and horizontally
-        self.N_NODES_VERTICAL: int = nodes_vertiacl
-        self.N_NODES_HORIZONTAL: int = nodes_horizontal
+            self.N_NODES_TOTAL: int = int(data["Nodes number"])
+            self.N_ELEMENTS_TOTAL: int = int(data["Elements number"])
 
-        # total number of nodes and elements
-        self.N_NODES_TOTAL: int = self.N_NODES_HORIZONTAL * self.N_NODES_VERTICAL
-        self.N_ELEMENTS_TOTAL: int = \
-            (self.N_NODES_HORIZONTAL - 1) * (self.N_NODES_VERTICAL - 1)
+            n = int(np.sqrt(nodes.shape[0]))
+            self.N_NODES_VERTICAL: int = n
+            self.N_NODES_HORIZONTAL: int = n
+
+            nodes = nodes \
+                .reshape((n, n, 2)) \
+                .transpose((1, 0, 2))[::-1, ::-1, :]
+
+            self.NODES: NodesContainer = NodesContainer((n, n),
+                                                        arg_nodes_arr=nodes)
+            self.ELEMENTS: ElementsContainer = \
+                ElementsContainer(self.get_n_elements(), self.NODES)
+        
+        else:
+            # height and width for whole square
+            self.HEIGHT: float = height
+            self.WIDTH: float = width
+
+            # number of nodes vertically and horizontally
+            self.N_NODES_VERTICAL: int = nodes_vertiacl
+            self.N_NODES_HORIZONTAL: int = nodes_horizontal
+
+            # total number of nodes and elements
+            self.N_NODES_TOTAL: int = self.N_NODES_HORIZONTAL * self.N_NODES_VERTICAL
+            self.N_ELEMENTS_TOTAL: int = \
+                (self.N_NODES_HORIZONTAL - 1) * (self.N_NODES_VERTICAL - 1)
 
 
+            # Initialization of the nodes
+            self.NODES: NodesContainer = NodesContainer(self.get_n_nodes(),
+                                                        size=self.get_size())
+
+            # Initialization of the elements. NodesContainer has to be initialized
+            # first
+            self.ELEMENTS: ElementsContainer = \
+                ElementsContainer(self.get_n_elements(), self.NODES)
+
+
+        # To del????
         ny, nx = self.get_n_nodes()
         self.H_AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
         self.Hbc_AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
         self.C_AGREGATION_MATRIX = self.H_AGREGATION_MATRIX.copy()
         self.P_AGREGATION_MATRIX = np.zeros((ny * nx))
-
-        # Initialization of the nodes
-        self.NODES: NodesContainer = NodesContainer(self.get_n_nodes(),
-                                                    size=self.get_size())
-
-        # Initialization of the elements. NodesContainer has to be initialized
-        # first
-        self.ELEMENTS: ElementsContainer = \
-            ElementsContainer(self.get_n_elements(), self.NODES)
         
         
     def fill_agregation_matrixes(self):
+        ny, nx = self.get_n_nodes()
         self.H_AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
         self.Hbc_AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
         self.C_AGREGATION_MATRIX = self.H_AGREGATION_MATRIX.copy()
@@ -757,8 +834,6 @@ class Mode(Enum):
     OPTION3 = auto()
     OPTION4 = auto()
 
-global aglobal
-aglobal = 10
 
 if __name__ == "__main__":
     
@@ -770,8 +845,20 @@ if __name__ == "__main__":
     Element.set_mask(e1)
 
     # Grid initialization
-    g = Grid(height=H, width=B, nodes_vertiacl=N_H, nodes_horizontal=N_B)
-    # g = Grid(height=10, width=5, nodes_vertiacl=7, nodes_horizontal=7)
+    # g = Grid(height=H, width=B, nodes_vertiacl=N_H, nodes_horizontal=N_B)
+
+    dl.load_data()
+    g = Grid(data=dl.data)
+
+    # # CONSTANTS
+    # SIM_TIME = dl.data["SimulationTime"]
+    # dT = dl.data["SimulationStepTime"]
+    # K = dl.data["Conductivity"]
+    # ALPHA = dl.data["Alfa"]
+    # T_o = dl.data["Tot"]
+    # t_0 = dl.data["InitialTemp"]
+    # rho = dl.data["Density"]
+    # C_p = dl.data["SpecificHead"]
 
     # ==== THE PROGRAM ====
     if mode == Mode.OPTION1:
@@ -781,7 +868,11 @@ if __name__ == "__main__":
     if mode == Mode.OPTION4:
         print(); print_H1("Grid:")
         printer.log(g, mode={'coor': 'e'})
+        grapher.graph(g)
+        pass
+        # g.NODES.get_np_array()
 
+        # assert False
         ny, nx = g.get_n_nodes()
         # TU MA BYC TA PETLA!!!!!!!!
         for iter_no in range(10):
