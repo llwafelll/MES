@@ -21,7 +21,7 @@ dl.load_data()
 from constants import *
 from custor_print_colored import print_H1, print_H2, print_H3
 from logger import *
-from matrix_partial_copy import Element4p_2D
+from matrix_partial_copy import * 
 import matplotlib.animation as animation
 
 # TODO: Think about changing datatype of surr_nodes to NodesContainer
@@ -318,35 +318,35 @@ class Element:
 
         # Initialize H matrix (4x4 matrix for each integration point)
         # [pc1, pc2, pc3, pc4]
-        self.Hpc = np.zeros((4, 4, 4))
+        self.Hpc = None
         # self._calc_H_matrix()
 
-        self.C_matrices = np.zeros((4, 4, 4))
+        self.C = None
         # self._calc_C_matrices()
 
         # Initialize Hbc (H on boundaries) matrix (4x4 matrix
         # for each integration point)
-        self.Hbc: np.ndarray = np.zeros((4, 4, 4))
+        self.Hbc = None
         # self._calc_Hbc_matrix()
         
-        self.Pvectors = np.zeros((4, 4))
+        self.P = None
         # self._calc_P_vector()
 
         Element._counter += 1
     
     def calculate(self):
-        self.Hpc = np.zeros((Element4p_2D.Npcs, 4, 4))
-        self.C_matrices = np.zeros((Element4p_2D.Npcs, 4, 4))
+        self.Hpc = np.zeros((Element.mask.Npcs, 4, 4))
+        self.C = np.zeros((Element.mask.Npcs, 4, 4))
         self.Hbc = np.zeros((4, 4, 4)) # <- for each surface (pre-summed each integration point)
-        self.Pvectors = np.zeros((4, 4)) # <- for each surface (pre-summed each integration point)
+        self.P = np.zeros((4, 4)) # <- for each surface (pre-summed each integration point)
+        # Hbc - (4edges, 4x4matrix) 2pcs/3pcs are pre-summed in contrary to Hpc
 
-        self._calc_H_matrix()
+        self._calc_Hpc_matrices()
         self._calc_C_matrices()
 
         # Boudary condition
-        
-        self._calc_Hbc_matrix()
-        self._calc_P_vector()
+        self._calc_Hbc_matrices()
+        self._calc_P_vectors()
         pass
     
     # FIXME: Delete?
@@ -375,7 +375,7 @@ class Element:
                          NodesContainer.calc_dist(self.surr_nodes[1, :]),
                          ])
 
-    def _calc_H_matrix(self):
+    def _calc_Hpc_matrices(self):
         """Updates H matrix in the element object. H object is NxN matrix where
         each column is integration point and column represents each shape funcion"""
 
@@ -389,8 +389,8 @@ class Element:
             mat[:, 0][:, :, np.newaxis] * mat[:, 0][:, np.newaxis] + \
             mat[:, 1][:, :, np.newaxis] * mat[:, 1][:, np.newaxis]
 
-        ws_ksi_order = np.array(Element4p_2D.ws_ksi_order)
-        ws_eta_order = np.array(Element4p_2D.ws_eta_order)
+        ws_ksi_order = np.array(Element.mask.ws_ksi_order)
+        ws_eta_order = np.array(Element.mask.ws_eta_order)
         # self.Hpc = K * mat * det(self.jacobians)
         self.Hpc = K * mat * det(self.jacobians)[:, np.newaxis, np.newaxis] * \
                    ws_ksi_order[:, np.newaxis, np.newaxis] * \
@@ -412,24 +412,24 @@ class Element:
         for pc, J in enumerate(self.jacobians):
             # self.C_matrices[pc] = Element4p_2D.N_matrix[pc][:, np.newaxis] * Element4p_2D.N_matrix[pc] * det(J) * C_p * rho
             # self.C_matrices[pc] = Element4p_2D._C_matrix[pc] * det(J)
-            self.C_matrices[pc] = Element4p_2D.N_matrix[pc, :, np.newaxis] * \
-                                  Element4p_2D.N_matrix[pc, :] * C_p * rho * det(J) * \
-                                  Element4p_2D.ws_ksi_order[pc] * Element4p_2D.ws_eta_order[pc]
+            self.C[pc] = Element.mask.N_matrix[pc, :, np.newaxis] * \
+                                  Element.mask.N_matrix[pc, :] * C_p * rho * det(J) * \
+                                  Element.mask.ws_ksi_order[pc] * Element.mask.ws_eta_order[pc]
         # for i, J in enumerate(self.jacobians):
         #     self.C_matrices[i] = Element4p_2D.pre_C_matrix * det(J)
         pass
     
     def get_C_matrix(self):
-        return np.sum(self.C_matrices, axis=0)
+        return np.sum(self.C, axis=0)
     
-    def _calc_Hbc_matrix(self):
+    def _calc_Hbc_matrices(self):
         nc: NodesContainer
         distances = self._calc_distances()
         nodes_pairs = self.surr_nodes.edge_nodes
 
-        for i, surface in enumerate(Element4p_2D.N_surf):
+        for i, surface in enumerate(Element.mask.N_surf):
             if isinstance(nodes_pairs[i], np.ndarray):
-                for row, wage in zip(surface, Element4p_2D.ws):
+                for row, wage in zip(surface, Element.mask.ws):
                     self.Hbc[i] += wage * row[:, np.newaxis] * row
 
                 self.Hbc[i] = self.Hbc[i] * ALPHA * distances[i]/2
@@ -447,29 +447,24 @@ class Element:
 
     def get_Hbc(self) -> np.ndarray:
         """Sum all pbcx and return H matrix."""
-        # _sum = np.zeros((4, 4))
-        # for i, edge in enumerate(self.surr_nodes.edge_nodes):
-        #     if isinstance(edge, np.ndarray):
-        #         _sum += self.Hbc[i]
 
-        # return _sum
         return self.Hbc.sum(axis=0)
     
     def get_H(self) -> np.ndarray:
-        return self.Hbc() + self.Hpc
+        return self.get_Hbc() + self.get_Hpc()
 
     
-    def _calc_P_vector(self):
+    def _calc_P_vectors(self):
 
         distances = self._calc_distances()
         nodes_pairs = self.surr_nodes.edge_nodes
 
-        for i, surface in enumerate(Element4p_2D.N_surf):
+        for i, surface in enumerate(Element.mask.N_surf):
             if isinstance(nodes_pairs[i], np.ndarray):
-                for row, wage in zip(surface, Element4p_2D.ws):
-                    self.Pvectors[i] += wage * row
+                for row, wage in zip(surface, Element.mask.ws):
+                    self.P[i] += wage * row
 
-                self.Pvectors[i] = self.Pvectors[i] * ALPHA * T_o * distances[i]/2
+                self.P[i] = self.P[i] * ALPHA * T_o * distances[i]/2
 
         # print()
 
@@ -503,13 +498,8 @@ class Element:
     
     def get_P_vector(self):
         '''P vector is sum of all P vectors (each P vector is for each edge)'''
-        return np.sum(self.Pvectors, axis=0)
-        # _sum = np.zeros((4, 4))
-        # for i, edge in enumerate(self.surr_nodes.edge_nodes):
-        #     if isinstance(edge, np.ndarray):
-        #         _sum[i] = self.Pvectors[i]
 
-        # return _sum
+        return np.sum(self.P, axis=0)
         
     def _calc_gradN(self):
         """Returns 4 element array (gradN) containing Nx2 arrays (each Nx2 array
@@ -519,15 +509,15 @@ class Element:
           [dN1/dy]], [dN2/dy]], [dN3/dy]], ...]
         """
 
-        gradN = np.empty((Element4p_2D.Npcs, 4, 2, 1))
+        gradN = np.empty((Element.mask.Npcs, 4, 2, 1))
 
-        for pc, jac in zip(range(Element4p_2D.Npcs), self.jacobians):
+        for pc, jac in zip(range(Element.mask.Npcs), self.jacobians):
 
             # [[dNi/deta],  this is loc_gradN
             #  [dNi/dksi]]
             loc_gradN = np.stack(
-                                 (Element4p_2D.dNdksi[pc],
-                                  Element4p_2D.dNdeta[pc]), axis=1
+                                 (Element.mask.dNdksi[pc],
+                                  Element.mask.dNdeta[pc]), axis=1
                                  )[:, :, np.newaxis]
 
             gradN[pc] = inv(jac) @ loc_gradN
@@ -548,13 +538,13 @@ class Element:
 
         # Ze wzoru na interpolacje
         # dx/dKsi = dN1/dKsi * x1 + dN2/dKsi * x2 + ...
-        dxdksi = np.sum(Element4p_2D.dNdksi[pc] * x)
-        dydeta = np.sum(Element4p_2D.dNdeta[pc] * y)
+        dxdksi = np.sum(Element.mask.dNdksi[pc] * x)
+        dydeta = np.sum(Element.mask.dNdeta[pc] * y)
         
         # dxdeta = np.sum(Element.mask.part_N_by_eta[pc] * x)
         # dydksi = np.sum(Element.mask.part_N_by_ksi[pc] * y)
-        dxdeta = np.sum(Element4p_2D.dNdeta[pc] * x)
-        dydksi = np.sum(Element4p_2D.dNdksi[pc] * y)
+        dxdeta = np.sum(Element.mask.dNdeta[pc] * x)
+        dydksi = np.sum(Element.mask.dNdksi[pc] * y)
         
         return np.array([[dxdksi, dydksi],
                          [dxdeta, dydeta]])
@@ -564,7 +554,7 @@ class Element:
 
         J = []
 
-        for i in range(Element4p_2D.Npcs):
+        for i in range(Element.mask.Npcs):
             J.append(self.calc_jacobian(i))
         
         return J
@@ -575,7 +565,7 @@ class Element:
         return [n._id - 1 for n in self._surr_nodes_as_list]
     
     @classmethod
-    def set_mask(cls, mask: Element4p_2D):
+    def set_mask(cls, mask):
         Element.mask = mask
 
 
@@ -679,22 +669,21 @@ class Grid:
             self.ELEMENTS: ElementsContainer = \
                 ElementsContainer(self.get_n_elements(), self.NODES)
 
-
         # To del????
-        ny, nx = self.get_n_nodes()
-        self.H_AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
-        self.Hbc_AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
-        self.C_AGREGATION_MATRIX = self.H_AGREGATION_MATRIX.copy()
-        self.P_AGREGATION_MATRIX = np.zeros((ny * nx))
+        self.H_AGREGATION_MATRIX = None
+        self.Hbc_AGREGATION_MATRIX = None
+        self.C_AGREGATION_MATRIX = None
+        self.P_AGREGATION_MATRIX = None
         
         
-    def fill_agregation_matrixes(self):
+    def fill_agregation_matrices(self):
         ny, nx = self.get_n_nodes()
         self.H_AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
-        self.Hbc_AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
+        # self.Hbc_AGREGATION_MATRIX = np.zeros((ny * nx, ny * nx))
         self.C_AGREGATION_MATRIX = self.H_AGREGATION_MATRIX.copy()
         self.P_AGREGATION_MATRIX = np.zeros((ny * nx))
-        # Fill global agregate matrix with data
+
+        # Fill global agregate matrices with data
         for element_id in range(1, self.N_ELEMENTS_TOTAL + 1):
             element = self.get_element_by_id(element_id)
             element.calculate()
@@ -704,13 +693,13 @@ class Grid:
             H_indices = it.product(range(4), repeat=2)
 
             for (i, j), (ax, ay) in zip(H_indices, local_agregate):
-                self.H_AGREGATION_MATRIX[ax, ay] += element.get_Hpc()[i, j]
+                self.H_AGREGATION_MATRIX[ax, ay] += element.get_H()[i, j]
 
-            local_agregate = it.product(element.get_surr_nodes_ids(), repeat=2)
-            H_indices = it.product(range(4), repeat=2)
+            # local_agregate = it.product(element.get_surr_nodes_ids(), repeat=2)
+            # H_indices = it.product(range(4), repeat=2)
 
-            for (i, j), (ax, ay) in zip(H_indices, local_agregate):
-                self.Hbc_AGREGATION_MATRIX[ax, ay] += element.get_Hbc()[i, j]
+            # for (i, j), (ax, ay) in zip(H_indices, local_agregate):
+            #     self.Hbc_AGREGATION_MATRIX[ax, ay] += element.get_Hbc()[i, j]
             
             local_agregate = it.product(element.get_surr_nodes_ids(), repeat=2)
             C_indices = it.product(range(4), repeat=2)
@@ -789,49 +778,6 @@ class Grid:
 
         return x, y
 
-    @staticmethod
-    def jakobian(element_id: Union[int, Element], row, J, Jinv,
-                 e: Element4p_2D, grid: Union[Grid, None] = None):
-
-        # part_N_by_eta = e.get_part_N_by_eta()
-        # part_N_by_ksi = e.get_part_N_by_ksi()
-        part_N_by_eta = Element4p_2D.dNdksi
-        part_N_by_ksi = Element4p_2D.dNdeta
-
-        NOD: np.ndarray
-        if isinstance(element_id, int) and grid:
-            NOD = grid.get_element_by_id(element_id).surr_nodes._array
-        elif isinstance(element_id, Element):
-            NOD = element_id.surr_nodes
-        else:
-            raise Exception("Invalid argument type for 'element_id'.")
-
-        X, Y = zip(*((v.x, v.y) for v in NOD[[1, 1, 0, 0], [0, 1, 1 ,0]]))
-        # X = np.array([NOD[1, 0].x, NOD[1, 1].x, NOD[0, 1].x, NOD[0, 0].x])
-        # Y = np.array([0, 0, .025, .025])
-        # Y = np.array([NOD[1, 0].y, NOD[1, 1].y, NOD[0, 1].y, NOD[0, 0].y])
-
-        # j = punkt calkowania, czy kolejnosc w part_N_by... jest dobra?
-        dxdksi = np.sum(part_N_by_ksi[row] * X)
-        dydeta = np.sum(part_N_by_eta[row] * Y)
-
-        dxdeta = np.sum(part_N_by_eta[row] * X)
-        dydksi = np.sum(part_N_by_ksi[row] * Y)
-
-        # creatge 2x2 matrix with diagonal created based on the provided list
-        J[:, :] = np.diag((dxdksi, dydeta))
-        np.fill_diagonal(J[:, ::-1], [-dxdeta, -dydksi])
-        Jinv[:, :] = inv(J)
-        # print("\nMacierz z x, y na przekatnej")
-        # print(M := np.diag((x, y)))
-
-        # print("\nMarcierz Jakobiego:")
-        # print(J := inv(M))
-
-        # print("\n1 / det(J) = ")
-        # print(1 / det(J))
-        # print()
-
 class Mode(Enum):
     ALL = auto()
     OPTION1 = auto()
@@ -846,7 +792,8 @@ if __name__ == "__main__":
     mode = Mode.OPTION4
 
     # Create universal element
-    e1: Element4p_2D = Element4p_2D()
+    # e1: Element4p_2D = Element4p_2D()
+    e1 = Element9pc_2D()
     Element.set_mask(e1)
 
     # Grid initialization
@@ -897,12 +844,12 @@ if __name__ == "__main__":
 
         for iter_no in range(int(SIM_TIME/dT)):
             print(f"\nITERATION {iter_no}\n")
-            g.fill_agregation_matrixes()
+            g.fill_agregation_matrices()
 
         # temps = np.full((ny * nx, ), t_0)
 
             print_H1("H+C/dT")
-            M = g.H_AGREGATION_MATRIX + g.Hbc_AGREGATION_MATRIX + g.C_AGREGATION_MATRIX/dT
+            M = g.H_AGREGATION_MATRIX + g.C_AGREGATION_MATRIX/dT
             # g.print_agregation_matrix(M)
 
             b = np.zeros((ny * ny, ))
@@ -944,8 +891,6 @@ if __name__ == "__main__":
         ani.save("animation.mp4", writer=writer, dpi=400)
 
         fd.close()
-
-
 
             # print_H1("N")
             # g.print_agregation_matrix(Element4p_2D.N_matrix)

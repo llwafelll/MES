@@ -4,7 +4,7 @@ import itertools as it
 from pcs_iterators import *
 from constants import *
 
-class Element4p_2D:
+class Element4pc_2D:
 
     # === VARTIABLES ===
     # Gauss integration variables
@@ -99,7 +99,7 @@ class Element4p_2D:
         pass
         
 
-class Element4p_2Ddisable:
+class Element9pc_2D:
     '''This is Element9p_2D but the name is Element4p_2D to avoid replacement
     in each occurence'''
 
@@ -196,5 +196,5 @@ class Element4p_2Ddisable:
     print()
 
 if __name__ == "__main__":
-    e1 =  Element4p_2D()
+    e1 =  Element4pc_2D()
     # e1.show_results()
