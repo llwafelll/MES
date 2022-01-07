@@ -13,15 +13,16 @@ from numpy.linalg import det, inv
 from termcolor import colored
 
 from txt_importer import dl
-# dl.change_file("Test1_4_4.txt")
-# dl.change_file("Test2_4_4_MixGrid.txt")
-# dl.change_file("Test3_31_31_kwadrat.txt")
-dl.change_file("Test4_31_31_trapez.txt")
+dl.change_file(filename := "Test1_4_4.txt")
+# dl.change_file(filename := "Test2_4_4_MixGrid.txt")
+# dl.change_file(filename := "Test3_31_31_kwadrat.txt")
+# dl.change_file(filename := "Test4_31_31_trapez.txt")
 dl.load_data()
 from constants import *
 from custor_print_colored import print_H1, print_H2, print_H3
 from logger import *
 from matrix_partial_copy import Element4p_2D
+import matplotlib.animation as animation
 
 # TODO: Think about changing datatype of surr_nodes to NodesContainer
 # remember to keep nodes as references
@@ -87,7 +88,8 @@ class Node:
 class NodesContainer:
     def __init__(self, n_nodes: tuple, size: tuple = None,
                  arg_surr_nodes: np.ndarray = np.array([]),
-                 arg_nodes_arr: np.ndarray = np.array([])) -> None:
+                 arg_nodes_arr: np.ndarray = np.array([]),
+                 arg_bc: np.ndarray = array([])) -> None:
         '''
         ARGS:
         n_nodes - number of nodes, respectively, in y and x axis
@@ -197,7 +199,8 @@ class NodesContainer:
 
             for es, k in zip(edge_noes, keys):
                 for e in es:
-                    e.update_edge(**{k: True})
+                    if e._id in arg_bc:
+                        e.update_edge(**{k: True})
 
             # # Update information about node's edges
             # for _node in nodes[0, :]:
@@ -210,8 +213,6 @@ class NodesContainer:
             #     _node.update_edge(False, True, False, False)
             
             self._array = nodes
-
-
                 
         self.shape = self._array.shape
 
@@ -641,12 +642,16 @@ class Grid:
             self.N_NODES_VERTICAL: int = n
             self.N_NODES_HORIZONTAL: int = n
 
+            # Initialize BC
+            self.BC: np.array = data["BC"]
+
             nodes = nodes \
                 .reshape((n, n, 2)) \
                 .transpose((1, 0, 2))[::-1, ::-1, :]
 
             self.NODES: NodesContainer = NodesContainer((n, n),
-                                                        arg_nodes_arr=nodes)
+                                                        arg_nodes_arr=nodes,
+                                                        arg_bc=self.BC)
             self.ELEMENTS: ElementsContainer = \
                 ElementsContainer(self.get_n_elements(), self.NODES)
         
@@ -874,8 +879,23 @@ if __name__ == "__main__":
 
         # assert False
         ny, nx = g.get_n_nodes()
-        # TU MA BYC TA PETLA!!!!!!!!
-        for iter_no in range(10):
+
+        # For animation
+        fig, ax = plt.subplots(figsize=(10, 10))
+        nodes = g.NODES.get_np_array()
+        X, Y = nodes.transpose((2, 1, 0))
+        sim = ax.scatter(X.ravel(), Y.ravel(),
+                         zorder=10, s=7, color='red', marker="o") 
+        images = []
+
+        try:
+            fd = open("nodes_temperatures.txt", "a")
+            fd.write(filename + "\n")
+        except Exception as e:
+            print(e)
+        
+
+        for iter_no in range(int(SIM_TIME/dT)):
             print(f"\nITERATION {iter_no}\n")
             g.fill_agregation_matrixes()
 
@@ -906,6 +926,25 @@ if __name__ == "__main__":
             print(f"max = {x.max()}")
             for i in range(ny * ny):
                 g.get_node_by_id(i).t_0 = x[i]
+           
+            im = ax.tricontourf(
+                            X.ravel(), Y.ravel(), x, 
+                            levels=np.linspace(0, T_o, 200))
+            images.append(im.collections + [sim])
+
+            try:
+                fd.write(f"{iter_no}\t{x.min()}  {x.max()}\n")
+            except Exception as e:
+                print(e)
+        
+        writer = animation.FFMpegWriter(
+             fps=15, metadata=dict(artist='Marcin Szram'), bitrate=1800)
+
+        ani = animation.ArtistAnimation(fig, images, interval=1000)
+        ani.save("animation.mp4", writer=writer, dpi=400)
+
+        fd.close()
+
 
 
             # print_H1("N")

@@ -11,7 +11,7 @@ class DataLoader:
     
     def __init__(self, filename=None):
         if filename:
-            self.change_file(self, filename)
+            self.change_file(filename)
         else:
             self.filename = None
             self.abs_path = None
@@ -31,6 +31,7 @@ class DataLoader:
         regex_consts = r"^((?:[a-zA-z]+\s)+)(\d+)"
         regex_nodes = r"(\d+),\s*?(\-?\d\.\d*),\s*?.(\-?\d\.\d*)"
         regex_elements = r"^\s(\d+),\s+((?:\d+(?:,\s+|\d+\s)+)+)"
+        regex_boundary_cond = r"^\b(?: ?\d+,?)+"
 
         with open(self.abs_path) as file:
             lines = file.readlines() # get list of strings of each line
@@ -67,6 +68,11 @@ class DataLoader:
                     row = int(find.group(1)) - 1
                     rows_elements = [int(i) for i in find.group(2).split(",")]
                     self.data["Elements"][row] = rows_elements
+                
+                if (find := re.search(regex_boundary_cond, line)):
+                    bc = np.array([int(i) for i in find.group(0).split(",")])
+                    self.data.update({"BC": bc})
+            
         pass
 
 dl = DataLoader()

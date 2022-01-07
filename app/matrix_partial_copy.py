@@ -4,7 +4,7 @@ import itertools as it
 from pcs_iterators import *
 from constants import *
 
-class Element4p_2Doriginal:
+class Element4p_2D:
 
     # === VARTIABLES ===
     # Gauss integration variables
@@ -95,48 +95,11 @@ class Element4p_2Doriginal:
 
     print()
 
-
-    # # === Calculate Hbc and Pvector helper matrices ===
-    # _Hbc = np.zeros((4, 4, 4))
-    # _Pvector = np.zeros((4, 4))
-
-    # _i = 0, 1, 3, 0 # first shape function indices
-    # _j = 3, 2, 2, 1 # second shape function indices
-    # _pos = -1, 1, 1, -1 # ksi and eta values
-    # rpcs = pcs[::-1]
-    # rws = ws[::-1]
-
-    # # left and right edges
-    # for c, ((i, j), pos) in enumerate(zip(zip(_i[:2], _j[:2]), _pos[:2])):
-    #     Na = np.zeros((2, 4))
-    #     for pc in range(2):
-    #         Na[pc, i] = N_functions[i](pos, rpcs[pc])
-    #         Na[pc, j] = N_functions[j](pos, rpcs[pc])
-    #         _Hbc[c] += rws[pc] * Na[pc][:, np.newaxis] * Na[pc]
-    #         _Pvector[c] += rws[pc] * Na[pc]
-
-    # # up and down edges
-    # for c, ((i, j), pos) in enumerate(zip(zip(_i[2:], _j[2:]), _pos[2:])):
-    #     Na = np.zeros((2, 4))
-    #     for pc in range(2):
-    #         Na[pc, i] = N_functions[i](rpcs[pc], pos)
-    #         Na[pc, j] = N_functions[j](rpcs[pc], pos)
-    #         _Hbc[c + 2] += rws[pc] * Na[pc][:, np.newaxis] * Na[pc]
-    #         _Pvector[c + 2] += rws[pc] * Na[pc]
-
-
-    # # === C MATRIX ===
-    # _C_matrix = np.zeros((4, 4, 4))
-    # for i, Ni in enumerate(N_matrix):
-    #     _C_matrix[i] = Ni[:, np.newaxis] * Ni * C_p * rho
-        
-    
-
     def __init__(self, element_size: tuple[float] = None) -> None:
         pass
         
 
-class Element4p_2D:
+class Element4p_2Ddisable:
     '''This is Element9p_2D but the name is Element4p_2D to avoid replacement
     in each occurence'''
 

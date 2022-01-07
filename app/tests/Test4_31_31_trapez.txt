@@ -1,4 +1,4 @@
-SimulationTime 20
+SimulationTime 50
 SimulationStepTime 1
 Conductivity 25
 Alfa 300

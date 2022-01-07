@@ -5,6 +5,7 @@ from numpy import array, newaxis
 import numpy as np
 from termcolor import colored
 from matplotlib import pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 class GridPrinter(ABC):
     def __init__(self) -> None:
@@ -114,7 +115,7 @@ class GridGrapher():
         ax.scatter(x.ravel(), y.ravel())
 
         plt.show()
-        
+    
 
 printer = GridPrinter()
 printer.set_logger(GridConsoleLogger())
