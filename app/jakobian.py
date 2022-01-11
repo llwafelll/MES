@@ -1,4 +1,4 @@
-from matrix_partial_copy import Element4p_2D
+from element import Element4p_2D
 import numpy as np
 from numpy.linalg import det, inv
 import itertools as it 

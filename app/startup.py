@@ -1,7 +1,3 @@
-# TODO: find metaclass that support struct-like classes in python
-# https://www.youtube.com/watch?v=vBH6GRJ1REM
-# TODO: matplotlib to visualize
-
 from __future__ import annotations
 
 import itertools as it
@@ -21,15 +17,9 @@ dl.load_data()
 from constants import *
 from custor_print_colored import print_H1, print_H2, print_H3
 from logger import *
-from matrix_partial_copy import * 
+from element import * 
 import matplotlib.animation as animation
 
-# TODO: Think about changing datatype of surr_nodes to NodesContainer
-# remember to keep nodes as references
-
-# K = 30
-# ALPHA = 25
-# T_o = 1200
 
 class Direction(Enum): 
     LEFT = auto()
@@ -792,25 +782,18 @@ if __name__ == "__main__":
     mode = Mode.OPTION4
 
     # Create universal element
-    # e1: Element4p_2D = Element4p_2D()
+    # e1 = Element4p_2D()
     e1 = Element9pc_2D()
     Element.set_mask(e1)
 
     # Grid initialization
-    # g = Grid(height=H, width=B, nodes_vertiacl=N_H, nodes_horizontal=N_B)
 
-    dl.load_data()
-    g = Grid(data=dl.data)
+    #Generate grid
+    g = Grid(height=H, width=B, nodes_vertiacl=N_H, nodes_horizontal=N_B)
 
-    # # CONSTANTS
-    # SIM_TIME = dl.data["SimulationTime"]
-    # dT = dl.data["SimulationStepTime"]
-    # K = dl.data["Conductivity"]
-    # ALPHA = dl.data["Alfa"]
-    # T_o = dl.data["Tot"]
-    # t_0 = dl.data["InitialTemp"]
-    # rho = dl.data["Density"]
-    # C_p = dl.data["SpecificHead"]
+    # Load grid from file (filename specyfication - top of this file)
+    # dl.load_data()
+    # g = Grid(data=dl.data)
 
     # ==== THE PROGRAM ====
     if mode == Mode.OPTION1:
@@ -818,77 +801,91 @@ if __name__ == "__main__":
     
 
     if mode == Mode.OPTION4:
+
+        # Print grid in console
         print(); print_H1("Grid:")
         printer.log(g, mode={'coor': 'e'})
+
+        # Graph nodes using matplotlib
         grapher.graph(g)
-        pass
-        # g.NODES.get_np_array()
 
         # assert False
         ny, nx = g.get_n_nodes()
 
-        # For animation
+        # ANIMATION
+        # Create matplotlib objects
         fig, ax = plt.subplots(figsize=(10, 10))
+        
+        # Nodes as numpy array for plotting
         nodes = g.NODES.get_np_array()
+
+        # Plot scatter on top of animation
         X, Y = nodes.transpose((2, 1, 0))
         sim = ax.scatter(X.ravel(), Y.ravel(),
                          zorder=10, s=7, color='red', marker="o") 
-        images = []
+        images = [] # animation frames
 
+        # SAVE TO FILE
         try:
             fd = open("nodes_temperatures.txt", "a")
             fd.write(filename + "\n")
         except Exception as e:
             print(e)
         
-
+        # PROGRAM
         for iter_no in range(int(SIM_TIME/dT)):
             print(f"\nITERATION {iter_no}\n")
             g.fill_agregation_matrices()
 
-        # temps = np.full((ny * nx, ), t_0)
+            # temps = np.full((ny * nx, ), t_0)
 
-            print_H1("H+C/dT")
             M = g.H_AGREGATION_MATRIX + g.C_AGREGATION_MATRIX/dT
+            # print_H1("H+C/dT")
             # g.print_agregation_matrix(M)
 
             b = np.zeros((ny * ny, ))
-            print_H1("P+C/dT * t_0")
-            temperatures = np.zeros((ny * ny,))
+            temperatures = np.zeros((ny * ny,)) 
+            # print_H1("P+C/dT * t_0")
+
             for i in range(ny * ny):
+                # read initial temp to vector
                 temperatures[i] = g.get_node_by_id(i).t_0
 
-            # for i in range(ny * ny):
-                # b[i] = g.P_AGREGATION_MATRIX[i] + \
-                #             np.sum(g.C_AGREGATION_MATRIX[i] / dT) * g.get_node_by_id(i).t_0
-            b = g.P_AGREGATION_MATRIX + np.squeeze((g.C_AGREGATION_MATRIX/dT) @ temperatures[:, np.newaxis])
-            # b = g.P_AGREGATION_MATRIX + \
-            #                           g.C_AGREGATION_MATRIX/dT @ temps
-            # print(b)
+            b = g.P_AGREGATION_MATRIX + \
+                np.squeeze((g.C_AGREGATION_MATRIX/dT) @ \
+                            temperatures[:, np.newaxis])
 
             print_H1("equation solution")
             x = np.linalg.solve(M, b)
             # print(x)
             print(f"min = {x.min()}")
             print(f"max = {x.max()}")
+
+            # Update temperaturs for each node
             for i in range(ny * ny):
                 g.get_node_by_id(i).t_0 = x[i]
-           
+            
+
+            # ADDIONAL FEATURES
+            # Plot contour plot for this iteration
             im = ax.tricontourf(
                             X.ravel(), Y.ravel(), x, 
                             levels=np.linspace(0, T_o, 200))
+            # Add plot to list containing all frames
             images.append(im.collections + [sim])
 
+            # Write max and min temperature to file
             try:
                 fd.write(f"{iter_no}\t{x.min()}  {x.max()}\n")
             except Exception as e:
                 print(e)
         
+        # Construct animation and write to file as .mp4
         writer = animation.FFMpegWriter(
              fps=15, metadata=dict(artist='Marcin Szram'), bitrate=1800)
 
         ani = animation.ArtistAnimation(fig, images, interval=1000)
-        ani.save("animation.mp4", writer=writer, dpi=400)
+        ani.save("animations/animation.mp4", writer=writer, dpi=400)
 
         fd.close()
 

@@ -26,14 +26,14 @@ class GridPrinter(ABC):
 class GridLogger(ABC):
     def __init__(self) -> None:
         self.grid = None
-        self.STR_LEN = 29
+        self.STR_LEN = 29 # change that if you change precision
     
     @abstractmethod
     def log(cls, grid, mode):
         pass
 
     @classmethod
-    def _print_elements(cls, nodes, elements, strlen, precision=2):
+    def _print_elements(cls, nodes, elements, strlen, precision=5):
         p = precision
         initial = True
         for Ncol, Ecol in zip_longest(nodes, elements, fillvalue=[]):
