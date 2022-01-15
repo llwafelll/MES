@@ -789,11 +789,11 @@ if __name__ == "__main__":
     # Grid initialization
 
     #Generate grid
-    g = Grid(height=H, width=B, nodes_vertiacl=N_H, nodes_horizontal=N_B)
+    # g = Grid(height=H, width=B, nodes_vertiacl=N_H, nodes_horizontal=N_B)
 
     # Load grid from file (filename specyfication - top of this file)
-    # dl.load_data()
-    # g = Grid(data=dl.data)
+    dl.load_data()
+    g = Grid(data=dl.data)
 
     # ==== THE PROGRAM ====
     if mode == Mode.OPTION1:
@@ -880,14 +880,14 @@ if __name__ == "__main__":
             except Exception as e:
                 print(e)
         
+        fd.close()
+
         # Construct animation and write to file as .mp4
         writer = animation.FFMpegWriter(
              fps=15, metadata=dict(artist='Marcin Szram'), bitrate=1800)
 
         ani = animation.ArtistAnimation(fig, images, interval=1000)
         ani.save("animations/animation.mp4", writer=writer, dpi=400)
-
-        fd.close()
 
             # print_H1("N")
             # g.print_agregation_matrix(Element4p_2D.N_matrix)
