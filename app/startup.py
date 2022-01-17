@@ -7,12 +7,13 @@ from typing import Type, Union
 import numpy as np
 from numpy.linalg import det, inv
 from termcolor import colored
+import os
 
 from txt_importer import dl
 # dl.change_file(filename := "Test1_4_4.txt")
-# dl.change_file(filename := "Test2_4_4_MixGrid.txt")
+dl.change_file(filename := "Test2_4_4_MixGrid.txt")
 # dl.change_file(filename := "Test3_31_31_kwadrat.txt")
-dl.change_file(filename := "Test4_31_31_trapez.txt")
+# dl.change_file(filename := "Test4_31_31_trapez.txt")
 dl.load_data()
 from constants import *
 from custor_print_colored import print_H1, print_H2, print_H3
@@ -863,6 +864,9 @@ if __name__ == "__main__":
              fps=15, metadata=dict(artist='Marcin Szram'), bitrate=1800)
 
         ani = animation.ArtistAnimation(fig, images, interval=1000)
+
+        if not os.path.isdir(".animations"):
+            os.mkdir("animations")
         ani.save("animations/animation.mp4", writer=writer, dpi=400)
 
             # print_H1("N")
