@@ -9,10 +9,10 @@ from numpy.linalg import det, inv
 from termcolor import colored
 
 from txt_importer import dl
-dl.change_file(filename := "Test1_4_4.txt")
+# dl.change_file(filename := "Test1_4_4.txt")
 # dl.change_file(filename := "Test2_4_4_MixGrid.txt")
 # dl.change_file(filename := "Test3_31_31_kwadrat.txt")
-# dl.change_file(filename := "Test4_31_31_trapez.txt")
+dl.change_file(filename := "Test4_31_31_trapez.txt")
 dl.load_data()
 from constants import *
 from custor_print_colored import print_H1, print_H2, print_H3
@@ -89,10 +89,11 @@ class NodesContainer:
         
         DESC:
         The constructor for NodesContainer works in two modes.
-        MODE_1: privide arg_nodes numpy array and n_nodes to create 
+        MODE_1: privide arg_surr_nodes numpy array and n_nodes to create 
                 new NodeContaier which holds references to the arg_nodes objects. 
-        MDOE_2: provide size and n_nodes to create new array of the nodes
+        MODE_2: provide size and n_nodes to create new array of the nodes
                 from scratch.
+        MODE_3: Generate grid from file
         '''
 
         # Crucial attribute of the class, while initialized should contain nodes
@@ -309,18 +310,14 @@ class Element:
         # Initialize H matrix (4x4 matrix for each integration point)
         # [pc1, pc2, pc3, pc4]
         self.Hpc = None
-        # self._calc_H_matrix()
 
         self.C = None
-        # self._calc_C_matrices()
 
         # Initialize Hbc (H on boundaries) matrix (4x4 matrix
         # for each integration point)
         self.Hbc = None
-        # self._calc_Hbc_matrix()
         
         self.P = None
-        # self._calc_P_vector()
 
         Element._counter += 1
     
@@ -338,20 +335,6 @@ class Element:
         self._calc_Hbc_matrices()
         self._calc_P_vectors()
         pass
-    
-    # FIXME: Delete?
-    # def _update_local_agregation_matrix(self):
-    #     element_ids = np.array([n._id for n in self._surr_nodes_as_list])
-    #     a = np.tile(element_ids, (4, 1))
-    #     b = np.tile(element_ids[:, np.newaxis], (1, 4))
-        
-    #     matrix = np.stack((b, a), axis=2)
-    #     Element.agregation_matrix = matrix
-    
-    # def equ(self):
-    #     T_1 = 0
-    #     T_0 = 1
-    #     self.get_H() * T_1 + self.get_C_matrix() * (T_1 - T_0)/(delta_T) + self.get_P_vector()
 
     def _calc_distances(self):
         '''Return array of distances between nodes on located on the same edge,
@@ -386,13 +369,6 @@ class Element:
                    ws_ksi_order[:, np.newaxis, np.newaxis] * \
                    ws_eta_order[:, np.newaxis, np.newaxis]
 
-        # for i, (gradN, j) in enumerate(zip(self._calc_gradN(),
-        #                                    self.calc_jacobians())):
-        #     gradN = gradN.T.reshape((2, 4))
-        #     self.Hpc[i] = (det(j) * K * \
-        #                 (gradN[0][:, np.newaxis] * gradN[0] + \
-        #                  gradN[1][:, np.newaxis] * gradN[1])
-        #                 )
 
     def get_Hpc(self) -> np.ndarray:
         """Sum all Hpcx and return H matrix."""
